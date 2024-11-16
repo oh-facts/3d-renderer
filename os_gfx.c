@@ -57,7 +57,7 @@ struct OS_Event
 	OS_Key key;
 	OS_EventKind kind;
 	OS_Handle win;
-	v2f mpos;
+	V2F mpos;
 };
 
 typedef struct OS_EventList OS_EventList;
@@ -72,7 +72,7 @@ struct OS_EventList
 function void os_innit();
 function OS_EventList os_pollEvents(Arena *arena);
 function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h);
-function v2s os_getWindowSize(OS_Handle handle);
+function V2S os_getWindowSize(OS_Handle handle);
 // =====================================
 
 function OS_Event *os_pushEvent(Arena *arena, OS_EventList *list)

@@ -170,7 +170,7 @@ typedef struct OS_Window OS_Window;
 struct OS_Window
 {
 	HWND hwnd;
- v2s size;
+    V2S size;
 };
 
 typedef struct OS_State OS_State;
@@ -444,7 +444,7 @@ function LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
 			s32 ypos = GET_Y_LPARAM(lParam);
 			
 			OS_Event *event = os_pushEvent(event_arena, &event_list);
-			event->mpos = (v2f){(f32)xpos, (f32)ypos};
+			event->mpos = (V2F){(f32)xpos, (f32)ypos};
 			event->kind = OS_EventKind_MouseMove;
 			
 			/*
@@ -502,8 +502,8 @@ function OS_Handle os_openWindow(char *title, f32 x, f32 y, f32 w, f32 h)
 	RegisterClass(&wc);
 	
 	win->hwnd = CreateWindowA(wc.lpszClassName, title, WS_OVERLAPPEDWINDOW, x, y, w, h, 0, 0, wc.hInstance, 0);
-	win->size = (v2s){w, h};
- 
+	win->size = (V2S){w, h};
+    
 	RAWINPUTDEVICE devices[2] = {0};
 	
 	devices[0].usUsagePage = 0x01;
@@ -526,7 +526,7 @@ function OS_Handle os_openWindow(char *title, f32 x, f32 y, f32 w, f32 h)
 	return out;
 }
 
-function v2s os_getWindowSize(OS_Handle handle)
+function V2S os_getWindowSize(OS_Handle handle)
 {
 	return os_state->win[0].size;
 }
@@ -548,9 +548,15 @@ function void os_vulkan_loadSurfaceFunction(OS_Handle vkdll)
 	vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)os_loadFunction(vkdll, "vkCreateWin32SurfaceKHR");
 }
 
-function char *os_vulkan_surfaceExtentionName()
+function s32 os_vulkan_getPlatformExtentions(char *extentions[])
 {
-	return VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+    if(extentions)
+    {
+        extentions[0] = VK_KHR_SURFACE_EXTENSION_NAME;
+        extentions[1] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+    }
+    
+    return 2;
 }
 
 function VkResult os_vulkan_createSurface(OS_Handle handle, VkInstance instance, VkSurfaceKHR *surface)

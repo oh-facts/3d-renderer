@@ -198,7 +198,7 @@ struct OS_Window
 	Window window;
 	Atom del_window;
 	b32 keys[OS_Key_COUNT];
-	v2s size;
+	V2S size;
 };
 
 typedef struct OS_State OS_State;
@@ -342,12 +342,13 @@ function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h)
 	XSelectInput(os_state->display, win->window, ExposureMask | KeyPressMask | KeyReleaseMask | ButtonReleaseMask | ButtonPressMask | PointerMotionMask | StructureNotifyMask);
 	XMapWindow(os_state->display, win->window);
 	
+    
 	OS_Handle out = {0};
 	out.u64[0] = win;
 	return out;
 }
 
-function v2s os_getWindowSize(OS_Handle handle)
+function V2S os_getWindowSize(OS_Handle handle)
 {
 	return os_state->win[0].size;
 }
@@ -366,9 +367,15 @@ function void os_vulkan_loadSurfaceFunction(OS_Handle vkdll)
 	vkCreateXlibSurfaceKHR = (PFN_vkCreateXlibSurfaceKHR)os_loadFunction(vkdll, "vkCreateXlibSurfaceKHR");
 }
 
-function char *os_vulkan_surfaceExtentionName()
+function s32 os_vulkan_getPlatformExtentions(char *extentions[])
 {
-	return VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    if(extentions)
+    {
+        extentions[0] = VK_KHR_SURFACE_EXTENSION_NAME;
+        extentions[1] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    }
+    
+    return 2;
 }
 
 function VkResult os_vulkan_createSurface(OS_Handle handle, VkInstance instance, VkSurfaceKHR *surface)
