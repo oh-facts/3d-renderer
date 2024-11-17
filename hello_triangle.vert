@@ -25,6 +25,6 @@ void main() {
     mat4 pv = view;
     gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0) * model * view * proj;
     //gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0) * view * proj;
-    
+    //gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0);
     fragColor = colors[gl_VertexIndex];
 }

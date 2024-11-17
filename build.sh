@@ -23,4 +23,4 @@ echo "[$build_type]"
 
 $compiler -Wall -Wextra -Wno-unused-function -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-sign-compare -Wno-unused-parameter -std=c99 -D_GNU_SOURCE $build_type -I. -c ./main.c -o main.o && echo "compiled yk"
 
-g++ main.o vma.o -o yk -lm -lX11 && echo "linked yk and vma"
+g++ main.o vma.o -o yk -lm -lglfw && echo "linked yk and vma"

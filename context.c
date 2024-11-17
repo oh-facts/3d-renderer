@@ -150,6 +150,10 @@ typedef int32_t b32;
 #define function static
 #include "os_vulkan.c"
 
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#include "os_glfw.c"
+
 #if defined(OS_WIN32)
 #undef function
 #define WIN32_LEAN_AND_MEAN
@@ -163,12 +167,15 @@ typedef int32_t b32;
 #include <errno.h>
 #include <dlfcn.h>
 #include <time.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/keysym.h>
-#include <X11/XKBlib.h>
 #define function static
-#include "os_linux.c"
+#include "os_unix.c"
+#elif defined(OS_APPLE)
+#include <sys/mman.h>
+#include <unistd.h>
+#include <errno.h>
+#include <dlfcn.h>
+#include <time.h>
+#include "os_unix.c"
 #else
 #error platform not supported
 #endif

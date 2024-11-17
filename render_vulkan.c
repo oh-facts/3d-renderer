@@ -23,6 +23,15 @@ function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
     
     if(os_event(list, OS_Key_SPACE, OS_EventKind_Pressed))
     {
+        if(camera->enable)
+        {
+            os_setCursorMode(OS_CursorMode_Normal);
+        }
+        else
+        {
+            os_setCursorMode(OS_CursorMode_Disabled);
+        }
+        
         camera->enable = !camera->enable;
         os_event(list, OS_Key_SPACE, OS_EventKind_Released);
     }
@@ -110,12 +119,10 @@ function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
         if(camera->mv.x > 0)
         {
             camera->pos = v3f_sub(camera->pos, vel);
-            printf("%f %f %f\n", camera->pos.x, camera->pos.y, camera->pos.z);
         }
         else if(camera->mv.x < 0)
         {
             camera->pos = v3f_add(camera->pos, vel);
-            printf("%f %f %f\n", camera->pos.x, camera->pos.y, camera->pos.z);
         }
         
         
@@ -129,15 +136,10 @@ function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
     }
     else
     {
-        int x, y;
-        unsigned int mask;
-        Window root = DefaultRootWindow(os_state->display);
-        XQueryPointer(os_state->display, os_state->win[0].window, &root, &root, &x, &y, &x, &y, &mask);
-        
-        printf("%d %d\n", x, y);
-        
-        camera->old_mpos.x = x;
-        camera->old_mpos.y = y;
+        double xpos, ypos;
+        glfwGetCursorPos(os_state->win[0].v, &xpos, &ypos);
+        camera->old_mpos.x = xpos;
+        camera->old_mpos.y = ypos;
     }
 }
 
@@ -359,16 +361,23 @@ function void r_vulkan_cleanupSwapchain()
 	//vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
 }
 
-function VkResult r_vulkan_createSwapchain()
+function VkResult r_vulkan_createSwapchain(OS_Handle win)
 {
 	// swapchain
 	VkSurfaceCapabilitiesKHR surface_cap = {0};
 	VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r_vulkan_state->phys_device, r_vulkan_state->surface, &surface_cap);
 	r_vulkanAssert(res);
     
-	r_vulkan_state->surface_extent = surface_cap.currentExtent;
+    if(surface_cap.currentExtent.width == UINT32_MAX)
+    {
+        V2S size = os_getWindowSize(win);
+        surface_cap.currentExtent.width = size.x;
+        surface_cap.currentExtent.height = size.y;
+    }
     
-	u32 format_count = 0;
+    r_vulkan_state->surface_extent = surface_cap.currentExtent;
+    
+    u32 format_count = 0;
 	res = vkGetPhysicalDeviceSurfaceFormatsKHR(r_vulkan_state->phys_device, r_vulkan_state->surface, &format_count, 0);
 	r_vulkanAssert(res);
     
@@ -591,11 +600,12 @@ function VkResult r_vulkan_createSwapchain()
 	return res;
 }
 
-function VkResult r_vulkan_recreateSwapchain()
+function VkResult r_vulkan_recreateSwapchain(OS_Handle win)
 {
+    //printf("recreated swapchain\n");
 	vkDeviceWaitIdle(r_vulkan_state->device);
 	r_vulkan_cleanupSwapchain();
-	r_vulkan_createSwapchain();
+	r_vulkan_createSwapchain(win);
     
 	return 0;
 }
@@ -653,15 +663,14 @@ void ubo_update(VmaAllocator allocator, YkBuffer* buffer, void* ubo, size_t size
 }
 */
 
-function void r_vulkanInnit(OS_Handle handle)
+function void r_vulkanInnit(OS_Handle win)
 {
 	Arena *arena = arenaAlloc();
 	r_vulkan_state = pushArray(arena, R_VULKAN_State, 1);
 	r_vulkan_state->arena = arena;
     
 	r_vulkan_state->vkdll = os_vulkan_loadLibrary();
-	os_vulkan_loadSurfaceFunction(r_vulkan_state->vkdll);
-    
+	
 	// load instance functions
 	vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)os_loadFunction(r_vulkan_state->vkdll, "vkGetInstanceProcAddr");
     
@@ -700,7 +709,12 @@ function void r_vulkanInnit(OS_Handle handle)
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_SURFACE_EXTENSION_NAME;
         }
-        
+#if defined(OS_APPLE)
+        {
+            char **ext = r_vulkan_pushExtention(&extentions, 1);
+            *ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+        }
+#endif
 #if R_VULKAN_DEBUG
         
 		validation_layers[validation_layers_num++] = (char*){
@@ -727,8 +741,14 @@ function void r_vulkanInnit(OS_Handle handle)
 		VkInstanceCreateInfo inst_info = {
 			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 			.pNext = 0,
-			.flags = 0,
-			.pApplicationInfo = &app_info,
+            
+#if defined(OS_APPLE)
+            .flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+#else
+            .flags = 0,
+#endif
+            
+            .pApplicationInfo = &app_info,
 			.enabledLayerCount = validation_layers_num,
 			.ppEnabledLayerNames = validation_layers,
 			.enabledExtensionCount = extentions.num,
@@ -863,7 +883,7 @@ function void r_vulkanInnit(OS_Handle handle)
 		}
 	}
     
-	res = os_vulkan_createSurface(handle, r_vulkan_state->instance, &r_vulkan_state->surface);
+	res = os_vulkan_createSurface(win, r_vulkan_state->instance, &r_vulkan_state->surface);
 	r_vulkanAssert(res);
     
 	// logical device
@@ -1005,7 +1025,7 @@ function void r_vulkanInnit(OS_Handle handle)
     
 	//vkCmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)os_loadFunction(vkdll, "vkCmdPipelineBarrier2KHR");
     
-	r_vulkan_createSwapchain();
+	r_vulkan_createSwapchain(win);
     
 	// hello triangle pipeline 
 	{
@@ -1338,7 +1358,6 @@ function void r_vulkanInnit(OS_Handle handle)
         
     }
     
-    
 	//arena_temp_end(&scratch);
 }
 
@@ -1372,7 +1391,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
     
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) 
 	{
-		res = r_vulkan_createSwapchain();
+		res = r_vulkan_createSwapchain(win);
 		r_vulkanAssert(res);
         
 		return;
@@ -1746,7 +1765,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
     
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR) || !v2s_equals(os_getWindowSize(win), r_vulkan_state->last_frame_window_size))
 	{
-		res = r_vulkan_recreateSwapchain();
+		res = r_vulkan_recreateSwapchain(win);
 		return;
 	}
     
