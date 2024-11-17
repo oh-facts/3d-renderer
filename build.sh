@@ -36,3 +36,5 @@ echo "[$build_type]"
 [ "$ext" == "1" ] && g++ -std=c++17 $build_type -I. -I$vulkan_sdk/include/vma -c vma.cpp -o vma.o && echo "compiled vma"
 
 $compiler -Wall -Wextra -Wno-unused-function -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-sign-compare -Wno-unused-parameter -std=c99 -D_GNU_SOURCE $build_type -I. -I$vulkan_sdk/include/vma -c ./main.c -o main.o && echo "compiled yk"
+
+g++ main.o vma.o -o yk -lm $(pkg-config --libs --static glfw3) && echo "linked yk and vma"
