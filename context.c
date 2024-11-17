@@ -170,11 +170,13 @@ typedef int32_t b32;
 #define function static
 #include "os_unix.c"
 #elif defined(OS_APPLE)
+#undef function
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
 #include <dlfcn.h>
 #include <time.h>
+#define function static
 #include "os_unix.c"
 #else
 #error platform not supported
