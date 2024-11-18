@@ -124,13 +124,14 @@ function OS_Event *os_event(OS_EventList *list, OS_Key key, OS_EventKind kind)
 	OS_Event *out = 0;
 	for(OS_Event *cur = list->first; cur; cur = cur->next)
 	{
-		if((cur->key == key || cur->key == OS_Key_NULL) && cur->kind == kind)
+		if((cur->key == key) && (cur->kind == kind))
 		{
-			out = os_eatEvent(list, cur);
+            out = os_eatEvent(list, cur);
 			break;
 		}
 	}
-	return out;
+	
+    return out;
 }
 
 read_only char *key_names[] = 

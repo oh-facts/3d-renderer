@@ -19,8 +19,6 @@ struct Camera
 
 function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
 {
-    //XWarpPointer(os_state->display, None, os_state->win[0].window, 0, 0, 0, 0, 960 / 2, 540 / 2);
-    
     if(os_event(list, OS_Key_SPACE, OS_EventKind_Pressed))
     {
         if(camera->enable)
@@ -33,6 +31,7 @@ function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
         }
         
         camera->enable = !camera->enable;
+        camera->mv = (V3F){0};
         os_event(list, OS_Key_SPACE, OS_EventKind_Released);
     }
     
@@ -713,11 +712,6 @@ function void r_vulkanInnit(OS_Handle win)
         {
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-        }
-        
-        {
-            char **ext = r_vulkan_pushExtention(&extentions, 1);
-            *ext = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
         }
         
 #endif
