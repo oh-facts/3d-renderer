@@ -714,6 +714,12 @@ function void r_vulkanInnit(OS_Handle win)
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
         }
+        
+        {
+            char **ext = r_vulkan_pushExtention(&extentions, 1);
+            *ext = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
+        }
+        
 #endif
 #if R_VULKAN_DEBUG
         
