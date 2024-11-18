@@ -153,6 +153,11 @@ function OS_EventList os_pollEvents(Arena *arena)
 
 function void os_glfw_keyCallback(GLFWwindow* window, int _key, int scancode, int action, int mods)
 {
+    if(_key == GLFW_KEY_COMMA)
+    {
+        volatile int i___ = 0;
+    }
+    
     s32 key = os_keyFromSym(_key);
     
     if(action == GLFW_PRESS)
