@@ -22,6 +22,7 @@ project.4coder
 yk
 *.lib
 *.spv
+compile_commands.json
 
 // debugger artifacts
 *.rdi
@@ -33,3 +34,6 @@ temp/
 art.txt
 scratch.c
 *.zip
+
+// macos
+.DS_Store
