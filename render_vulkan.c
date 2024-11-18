@@ -2,6 +2,7 @@
 #define R_VULKAN_DEBUG 1
 #define R_VULKAN_FRAMES 3
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_beta.h>
 
 #define CAMERA_UP ((V3F){{0, -1, 0}})
 #define CAMERA_FRONT ((V3F){{0, 0, -1}})
@@ -713,7 +714,11 @@ function void r_vulkanInnit(OS_Handle win)
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
         }
-        
+
+        {
+            char **ext = r_vulkan_pushExtention(&extentions, 1);
+            *ext = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+        }
 #endif
 #if R_VULKAN_DEBUG
         
@@ -769,7 +774,6 @@ function void r_vulkanInnit(OS_Handle win)
     vkGetPhysicalDeviceSurfaceFormatsKHR = vkGetInstanceProcAddr(r_vulkan_state->instance, "vkGetPhysicalDeviceSurfaceFormatsKHR");
     
     vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr(r_vulkan_state->instance, "vkGetDeviceProcAddr");
-    
 	// device selection
 	{
 		u32 count = 0;
@@ -813,10 +817,10 @@ function void r_vulkanInnit(OS_Handle win)
             
 			features[i].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 			features[i].pNext = &vk12_feat;
-            
+
 			VkPhysicalDeviceProperties props = {0};
 			vkGetPhysicalDeviceProperties(phys_devices[i], &props);
-            
+
 			// print gpu details
 			printf("--------index %d--------\n", i);
 			printf("Name: %s\n",props.deviceName);
@@ -888,11 +892,14 @@ function void r_vulkanInnit(OS_Handle win)
     
 	// logical device
 	{
-		char* device_extention_names[4] = {
+		char* device_extention_names[] = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
 			VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 			VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 			VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+#if defined(OS_APPLE)
+			VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
+#endif
 		};
         
 		f32 q_priorities[1] = {1.f};
@@ -930,7 +937,7 @@ function void r_vulkanInnit(OS_Handle win)
 			.pQueueCreateInfos = &q_info,
 			.enabledLayerCount = 0,
 			.ppEnabledLayerNames = 0,
-			.enabledExtensionCount = 4,
+			.enabledExtensionCount = arrayLen(device_extention_names),
 			.ppEnabledExtensionNames = device_extention_names,
 			.pEnabledFeatures = 0
 		};
