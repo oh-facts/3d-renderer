@@ -892,7 +892,7 @@ function void r_vulkanInnit(OS_Handle win)
     
 	// logical device
 	{
-		char* device_extention_names[5] = {
+		char* device_extention_names[] = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
 			VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 			VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
@@ -937,7 +937,7 @@ function void r_vulkanInnit(OS_Handle win)
 			.pQueueCreateInfos = &q_info,
 			.enabledLayerCount = 0,
 			.ppEnabledLayerNames = 0,
-			.enabledExtensionCount = 5,
+			.enabledExtensionCount = arrayLen(device_extention_names),
 			.ppEnabledExtensionNames = device_extention_names,
 			.pEnabledFeatures = 0
 		};
