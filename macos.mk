@@ -57,7 +57,7 @@ ifeq ($(ext),1)
 endif # ext
 	$(compiler) $(flags) $(build_flags) -I. -c main.c -o main.o
 	@echo "compiled yk"
-	$(compiler_cpp) -I$(vulkan_include) main.o vma.o -o yk -lm -lglfw3 -framework Cocoa -framework IOKit -framework CoreFoundation -framework QuartzCore -lvulkan
+	$(compiler_cpp) -I$(vulkan_include) main.o vma.o -o yk -Wl,-rpath,/usr/local/lib -lm -lglfw3 -framework Cocoa -framework IOKit -framework CoreFoundation -framework QuartzCore -lvulkan
 	@echo "linked yk and vma"
 clean:
 	rm -f yk libvma.a *.o *.spv
