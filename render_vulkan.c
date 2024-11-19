@@ -714,7 +714,7 @@ function void r_vulkanInnit(OS_Handle win)
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
         }
-
+        
         {
             char **ext = r_vulkan_pushExtention(&extentions, 1);
             *ext = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
@@ -817,10 +817,10 @@ function void r_vulkanInnit(OS_Handle win)
             
 			features[i].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 			features[i].pNext = &vk12_feat;
-
+            
 			VkPhysicalDeviceProperties props = {0};
 			vkGetPhysicalDeviceProperties(phys_devices[i], &props);
-
+            
 			// print gpu details
 			printf("--------index %d--------\n", i);
 			printf("Name: %s\n",props.deviceName);
@@ -1538,7 +1538,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
     memcpy(mappedData, &data, sizeof(R_VULKAN_SceneData));
     vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
     
-	vkCmdDraw(frame->cmd_buffer, 3, 1, 0, 0);
+	vkCmdDraw(frame->cmd_buffer, 6, 1, 0, 0);
     
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
     

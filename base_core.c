@@ -36,32 +36,32 @@ function void* arenaPushImpl(Arena* arena, size_t size)
 {
     u64 pos_mem = alignPow2(arena->used, arena->align);
     u64 pos_new = pos_mem + size;
-
+    
     if(arena->res < pos_new)
     {
         // TODO(mizu): deal with reserving more (chain arenas)
         INVALID_CODE_PATH();
     }
-
+    
     if(arena->cmt < pos_new)
     {
         u64 cmt_new_aligned, cmt_new_clamped, cmt_new_size;
-
+        
         cmt_new_aligned = alignPow2(pos_new, ARENA_COMMIT_SIZE);
         cmt_new_clamped = clampTop(cmt_new_aligned, arena->res);
         cmt_new_size    = cmt_new_clamped - arena->cmt;
         os_commit((u8*)arena + arena->cmt, cmt_new_size);
         arena->cmt = cmt_new_clamped;
     }
-
+    
     void *memory = 0;
-
+    
     if (arena->cmt >= pos_new)
     {
         memory = (u8*)arena + pos_mem;
         arena->used = pos_new;
     }
-
+    
     return memory;
 }
 
@@ -78,24 +78,24 @@ function ArenaTemp arenaTempBegin(Arena *arena)
 function void arenaTempEnd(ArenaTemp *temp)
 {
     memset((u8*)temp->arena + temp->pos, 0, temp->arena->used - temp->pos);
-
+    
     temp->arena->used = temp->pos;
 }
 
 function Arena *arenaAllocSized(u64 cmt, u64 res)
 {
     Arena *arena = 0;
-
+    
     void *memory = os_reserve(res);
     os_commit(memory, cmt);
-
+    
     arena = (Arena*)memory;
     arena->used = ARENA_HEADER_SIZE;
     arena->align = DEFAULT_ALIGN;
-
+    
     arena->cmt = alignPow2(cmt, os_getPageSize());
     arena->res = res;
-
+    
     return arena;
 }
 
@@ -160,10 +160,10 @@ function void tcxt_process_debug_counters()
     {
         cycleCounter *counter = tcxt->counters + i;
         cycleCounter *counter_last = tcxt->counters_last + i;
-
+        
         counter_last->hit_count = counter->hit_count;
         counter_last->cycle_count = counter->cycle_count;
-
+        
         //printf("%d: %lu\n", i, counter->cycle_count);
         counter->hit_count = 0;
         counter->cycle_count = 0;
@@ -175,8 +175,8 @@ function void tcxt_print_debug_counters()
     for(u32 i = 0; i < arrayLen(tcxt->counters); i ++)
     {
         cycleCounter *counter = tcxt->counters_last + i;
-
-        printf("%s: %llu\n", cycle_to_str[i], counter->cycle_count);
+        
+        printf("%s: %lu\n", cycle_to_str[i], counter->cycle_count);
     }
 }
 
@@ -199,7 +199,7 @@ function Arena *tcxt_get_scratch(Arena **conflicts, u64 count)
             out = tcxt->arenas[i];
         }
     }
-
+    
     return out;
 }
 
