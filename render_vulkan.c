@@ -154,12 +154,27 @@ function M4F camGetView(Camera *camera)
     return m4f_lookAt(camera->pos, v3f_add(camera->pos, dir), CAMERA_UP);
 }
 
+#define NUM_OBJECTS 256
+
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
 {
     M4F proj;
     M4F view;
-    M4F model;
+    M4F model[NUM_OBJECTS];
+    u32 tex_id;
+    u32 pad;
+};
+
+typedef struct R_VULKAN_Image R_VULKAN_Image;
+struct R_VULKAN_Image
+{
+    VkSampler sampler;
+    VkImage image;
+    VkImageView view;
+    VmaAllocation memory;
+    VkExtent3D extent;
+    VkFormat format;
 };
 
 typedef struct R_VULKAN_Buffer R_VULKAN_Buffer;
@@ -233,6 +248,7 @@ struct R_VULKAN_State
     
 	VkCommandPool im_cmd_pool;
 	VkCommandBuffer im_cmd_buffer;
+    VkFence im_fence;
 };
 
 global R_VULKAN_State *r_vulkan_state;
@@ -248,7 +264,7 @@ function void r_vulkanAssertImpl(VkResult res)
 
 #if R_VULKAN_DEBUG
 #define r_vulkanAssert(res) r_vulkanAssertImpl(res)
-#elif
+#else
 #define r_vulkanAssert(res)
 #endif
 
@@ -296,6 +312,7 @@ global PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
 // command buffers
 global PFN_vkCreateCommandPool vkCreateCommandPool;
 global PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
+global PFN_vkResetCommandBuffer vkResetCommandBuffer;
 
 // sync
 global PFN_vkCreateSemaphore vkCreateSemaphore;
@@ -315,12 +332,211 @@ global PFN_vkCmdDraw vkCmdDraw;
 global PFN_vkCmdBlitImage2KHR vkCmdBlitImage2KHR;
 global PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR;
 global PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
+global PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
 
 // submit
 global PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
 
 // present
 global PFN_vkQueuePresentKHR vkQueuePresentKHR;
+
+function R_VULKAN_Buffer r_vulkan_createBuffer(u64 size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage)
+{
+    R_VULKAN_Buffer out = {0};
+    
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = 0,
+        .flags = 0,
+        .size = size,
+        .usage = buffer_usage,
+        .sharingMode = 0,
+        .queueFamilyIndexCount = 0,
+    };
+    
+    VmaAllocationCreateInfo vma_info = {0};
+    vma_info.usage = memory_usage;
+    vma_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    
+    vmaCreateBuffer(r_vulkan_state->vma, &buffer_info, &vma_info, &out.buffer, &out.alloc, &out.info);
+    return out;
+}
+
+function void r_vulkan_imBeginSubmit()
+{
+    vkResetFences(r_vulkan_state->device, 1, &r_vulkan_state->im_fence);
+    vkResetCommandBuffer(r_vulkan_state->im_cmd_buffer, 0);
+    
+    VkCommandBufferBeginInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    
+    vkBeginCommandBuffer(r_vulkan_state->im_cmd_buffer, &info);
+}
+
+function void r_vulkan_imEndSubmit()
+{
+    vkEndCommandBuffer(r_vulkan_state->im_cmd_buffer);
+    
+    VkCommandBufferSubmitInfo buffer_submit_info = {};
+    buffer_submit_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    buffer_submit_info.commandBuffer = r_vulkan_state->im_cmd_buffer;
+    
+    VkSubmitInfo2 submit_info = {};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.pCommandBufferInfos = &buffer_submit_info;
+    submit_info.commandBufferInfoCount = 1;
+    
+    vkQueueSubmit2KHR(r_vulkan_state->q_main, 1, &submit_info, r_vulkan_state->im_fence);    
+    vkWaitForFences(r_vulkan_state->device, 1, &r_vulkan_state->im_fence, VK_TRUE, UINT64_MAX);
+}
+
+function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
+{
+    R_VULKAN_Image out = {0};
+    
+    VmaAllocationCreateInfo alloc_info = {0};
+    alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+    alloc_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    
+    VkImageCreateInfo img_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = 0,
+        
+        .imageType = VK_IMAGE_TYPE_2D,
+        
+        .format = VK_FORMAT_R8G8B8A8_SRGB,
+        .extent = {.width = bmp.w, .height = bmp.h, .depth = 1},
+        
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+    };
+    
+    vmaCreateImage(r_vulkan_state->vma, &img_info, &alloc_info, &out.image, &out.memory, 0);
+    
+    VkImageViewCreateInfo view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = 0,
+        
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .image = out.image,
+        .format = img_info.format,
+        .subresourceRange.baseMipLevel = 0,
+        .subresourceRange.levelCount = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount = 1,
+        .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    };
+    
+    vkCreateImageView(r_vulkan_state->device, &view_info, 0, &out.view);
+    
+    size_t data_size = (size_t)img_info.extent.width * img_info.extent.height * img_info.extent.depth * 4;
+    
+    R_VULKAN_Buffer copy_buffer = r_vulkan_createBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    
+    memcpy(copy_buffer.info.pMappedData, bmp.data, data_size);
+    
+    r_vulkan_imBeginSubmit();
+    
+    {
+		VkImageMemoryBarrier2 barrier = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.pNext = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			.srcAccessMask = VK_ACCESS_NONE,
+			.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
+			.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = out.image,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = VK_REMAINING_MIP_LEVELS,
+				.baseArrayLayer = 0,
+				.layerCount = VK_REMAINING_ARRAY_LAYERS,
+			},
+		};
+        
+		VkDependencyInfo dep_info = {
+			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+			.pNext = 0,
+			.dependencyFlags = 0,
+			.memoryBarrierCount = 0,
+			.pMemoryBarriers = 0,
+			.bufferMemoryBarrierCount = 0,
+			.pBufferMemoryBarriers = 0,
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &barrier,
+		};
+        
+		vkCmdPipelineBarrier2KHR(r_vulkan_state->im_cmd_buffer, &dep_info);
+	}
+    
+    VkBufferImageCopy copy_region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        
+        .imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .imageSubresource.mipLevel = 0,
+        .imageSubresource.baseArrayLayer = 0,
+        .imageSubresource.layerCount = 1,
+        .imageExtent = img_info.extent,
+    };
+    
+    vkCmdCopyBufferToImage(r_vulkan_state->im_cmd_buffer, copy_buffer.buffer, out.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+    
+    {
+        VkImageMemoryBarrier2 barrier = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.pNext = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
+			.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = out.image,
+			.subresourceRange = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = VK_REMAINING_MIP_LEVELS,
+				.baseArrayLayer = 0,
+				.layerCount = VK_REMAINING_ARRAY_LAYERS,
+			},
+		};
+        
+		VkDependencyInfo dep_info = {
+			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+			.pNext = 0,
+			.dependencyFlags = 0,
+			.memoryBarrierCount = 0,
+			.pMemoryBarriers = 0,
+			.bufferMemoryBarrierCount = 0,
+			.pBufferMemoryBarriers = 0,
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &barrier,
+		};
+        
+		vkCmdPipelineBarrier2KHR(r_vulkan_state->im_cmd_buffer, &dep_info);
+	}
+    
+    r_vulkan_imEndSubmit();
+    
+    //ykr_destroy_buffer(renderer->vma_allocator, &copy_data.copy_buffer);
+    
+    return out;
+}
 
 typedef struct R_VULKAN_ExtentionList R_VULKAN_ExtentionList;
 struct R_VULKAN_ExtentionList
@@ -611,28 +827,6 @@ function VkResult r_vulkan_recreateSwapchain(OS_Handle win)
 }
 
 // ======================================
-
-function R_VULKAN_Buffer r_vulkan_createBuffer(u64 size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage)
-{
-    R_VULKAN_Buffer out = {0};
-    
-    VkBufferCreateInfo buffer_info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .pNext = 0,
-        .flags = 0,
-        .size = size,
-        .usage = buffer_usage,
-        .sharingMode = 0,
-        .queueFamilyIndexCount = 0,
-    };
-    
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = memory_usage;
-    vma_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    
-    vmaCreateBuffer(r_vulkan_state->vma, &buffer_info, &vma_info, &out.buffer, &out.alloc, &out.info);
-    return out;
-}
 
 function VkDescriptorSet r_vulkan_allocDescriptorSet(VkDescriptorPool pool, VkDescriptorSetLayout* layouts)
 {
@@ -978,9 +1172,10 @@ function void r_vulkanInnit(OS_Handle win)
 	// command buffers
 	vkCreateCommandPool = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateCommandPool");
 	vkAllocateCommandBuffers = vkGetDeviceProcAddr(r_vulkan_state->device, "vkAllocateCommandBuffers");
+    vkResetCommandBuffer = vkGetDeviceProcAddr(r_vulkan_state->device, "vkResetCommandBuffer");
     
-	// sync
-	vkCreateSemaphore = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateSemaphore");
+    // sync
+    vkCreateSemaphore = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateSemaphore");
 	vkCreateFence = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateFence");
 	vkWaitForFences = vkGetDeviceProcAddr(r_vulkan_state->device, "vkWaitForFences");
 	vkResetFences = vkGetDeviceProcAddr(r_vulkan_state->device, "vkResetFences");
@@ -997,6 +1192,7 @@ function void r_vulkanInnit(OS_Handle win)
 	vkCmdBlitImage2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBlitImage2KHR");
 	vkCmdPipelineBarrier2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdPipelineBarrier2KHR");
 	vkCmdBindDescriptorSets = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBindDescriptorSets");
+    vkCmdCopyBufferToImage = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdCopyBufferToImage");
     
     // submit
     vkQueueSubmit2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkQueueSubmit2KHR");
@@ -1285,7 +1481,24 @@ function void r_vulkanInnit(OS_Handle win)
 			res = vkAllocateCommandBuffers(r_vulkan_state->device, &cmd_buffer_info, &frame->cmd_buffer);
 			r_vulkanAssert(res);
 		}
-	}
+        
+        // im commands
+        {
+            res = vkCreateCommandPool(r_vulkan_state->device, &cmd_pool_info, 0, &r_vulkan_state->im_cmd_pool);
+            r_vulkanAssert(res);
+            
+            VkCommandBufferAllocateInfo cmd_buffer_info = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = 0,
+                .commandPool = r_vulkan_state->im_cmd_pool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
+            };
+            
+            res = vkAllocateCommandBuffers(r_vulkan_state->device, &cmd_buffer_info, &r_vulkan_state->im_cmd_buffer);
+            r_vulkanAssert(res);
+        }
+    }
     
 	// sync objects
 	{
@@ -1315,6 +1528,9 @@ function void r_vulkanInnit(OS_Handle win)
 			r_vulkanAssert(res);
 		}
         
+        res = vkCreateFence(r_vulkan_state->device, &fence_create_info, 0, &r_vulkan_state->im_fence);
+        r_vulkanAssert(res);
+        
 	}
     
     // descriptor set
@@ -1338,6 +1554,7 @@ function void r_vulkanInnit(OS_Handle win)
         res = vkCreateDescriptorPool(r_vulkan_state->device, &info, 0, &r_vulkan_state->hello_triangle_descriptor_pool);
         r_vulkanAssert(res);
         
+        // scene descriptor
         for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
         {
             R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
@@ -1363,9 +1580,14 @@ function void r_vulkanInnit(OS_Handle win)
             vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
         }
         
+        // texture descriptors
+        
     }
     
-	//arena_temp_end(&scratch);
+    Bitmap bmp = bitmap(str8_lit("ell"));
+    R_VULKAN_Image img = r_vulkan_image(bmp);
+    
+    //arena_temp_end(&scratch);
 }
 
 function void r_vulkan_beginRendering()
@@ -1527,18 +1749,25 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
         .proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
         .view = camGetView(&camera),
         //.view = view,
-        .model = m4f_mul(m4f_translate(v3f(0, 0, 3)), m4f_rotate(v3f(0, 1, 0), counter))
-            //.model = m4f_rotate(v3f(0, 1, 0), counter),
-            //.model = m4f(1)
-            //.model = m4f_translate(v3f(0, 0.2, 0))
+        //.model[0] = m4f_mul(m4f_translate(v3f(-3, 0, 3)), m4f_rotate(v3f(0, 1, 0), counter)),
+        //.model = m4f_rotate(v3f(0, 1, 0), counter),
+        //.model = m4f(1)
+        //.model = m4f_translate(v3f(0, 0.2, 0))
     };
+    
+    srand(0);
+    for(s32 i = 0; i < NUM_OBJECTS; i++)
+    {
+        M4F trans = m4f_translate(v3f(i * rand() % 16, i * rand() % 16, i * rand() % 16));
+        data.model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
+    }
     
     void* mappedData;
     vmaMapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc, &mappedData);
     memcpy(mappedData, &data, sizeof(R_VULKAN_SceneData));
     vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
     
-	vkCmdDraw(frame->cmd_buffer, 6, 1, 0, 0);
+	vkCmdDraw(frame->cmd_buffer, 6, NUM_OBJECTS, 0, 0);
     
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
     
