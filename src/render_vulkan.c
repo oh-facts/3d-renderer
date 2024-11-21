@@ -1570,19 +1570,19 @@ function void r_vulkanInnit(OS_Handle win)
     // resources
     {
         {
-            Bitmap bmp = bitmap(str8_lit("ell"));
+            Bitmap bmp = bitmap(str8_lit("scratch/ell"));
             r_vulkan_state->textures[0] = r_vulkan_image(bmp);
         }
         {
-            Bitmap bmp = bitmap(str8_lit("marhall"));
+            Bitmap bmp = bitmap(str8_lit("scratch/marhall"));
             r_vulkan_state->textures[1] = r_vulkan_image(bmp);
         }
         {
-            Bitmap bmp = bitmap(str8_lit("maruko"));
+            Bitmap bmp = bitmap(str8_lit("scratch/maruko"));
             r_vulkan_state->textures[2] = r_vulkan_image(bmp);
         }
         {
-            Bitmap bmp = bitmap(str8_lit("ankha.png"));
+            Bitmap bmp = bitmap(str8_lit("scratch/ankha.png"));
             r_vulkan_state->textures[3] = r_vulkan_image(bmp);
         }
     }
