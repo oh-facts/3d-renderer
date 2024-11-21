@@ -162,7 +162,7 @@ struct R_VULKAN_SceneData
     M4F proj;
     M4F view;
     M4F model[NUM_OBJECTS];
-    u32 tex_id;
+    u32 tex_id[NUM_OBJECTS];
     u32 pad;
 };
 
@@ -249,6 +249,8 @@ struct R_VULKAN_State
 	VkCommandPool im_cmd_pool;
 	VkCommandBuffer im_cmd_buffer;
     VkFence im_fence;
+    
+    R_VULKAN_Image textures[10];
 };
 
 global R_VULKAN_State *r_vulkan_state;
@@ -293,6 +295,7 @@ global PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
 
 global PFN_vkCreateImageView vkCreateImageView;
 global PFN_vkCreateImage vkCreateImage;
+global PFN_vkCreateSampler vkCreateSampler;
 
 global PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
 
@@ -399,13 +402,16 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
     alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
     alloc_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     
+    VkFormat format = {0};
+    format = VK_FORMAT_R8G8B8A8_SRGB;
+    
     VkImageCreateInfo img_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = 0,
         
         .imageType = VK_IMAGE_TYPE_2D,
         
-        .format = VK_FORMAT_R8G8B8A8_SRGB,
+        .format = format,
         .extent = {.width = bmp.w, .height = bmp.h, .depth = 1},
         
         .mipLevels = 1,
@@ -532,6 +538,23 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 	}
     
     r_vulkan_imEndSubmit();
+    
+    VkSamplerCreateInfo sampler_info = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        
+        // set anistoropyptosy
+        
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+        
+    };
+    
+    vkCreateSampler(r_vulkan_state->device, &sampler_info, 0, &out.sampler);
     
     //ykr_destroy_buffer(renderer->vma_allocator, &copy_data.copy_buffer);
     
@@ -1153,6 +1176,7 @@ function void r_vulkanInnit(OS_Handle win)
     
 	vkCreateImageView = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateImageView");
 	vkCreateImage = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateImage");
+    vkCreateSampler = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCreateSampler");
     
 	vkAcquireNextImageKHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkAcquireNextImageKHR");
     
@@ -1384,20 +1408,30 @@ function void r_vulkanInnit(OS_Handle win)
         
         // descriptor set layout
         
-        VkDescriptorSetLayoutBinding descriptor_binding = {
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .pImmutableSamplers = 0,
+        VkDescriptorSetLayoutBinding descriptor_bindings[2] = {
+            [0] = {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = 0,
+            },
+            [1] = {
+                .binding = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 10,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = 0,
+            },
+            
         };
         
         VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = 0,
             .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-            .bindingCount = 1,
-            .pBindings = &descriptor_binding,
+            .bindingCount = 2,
+            .pBindings = descriptor_bindings,
         };
         
         res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
@@ -1533,12 +1567,36 @@ function void r_vulkanInnit(OS_Handle win)
         
 	}
     
+    // resources
+    {
+        {
+            Bitmap bmp = bitmap(str8_lit("ell"));
+            r_vulkan_state->textures[0] = r_vulkan_image(bmp);
+        }
+        {
+            Bitmap bmp = bitmap(str8_lit("marhall"));
+            r_vulkan_state->textures[1] = r_vulkan_image(bmp);
+        }
+        {
+            Bitmap bmp = bitmap(str8_lit("maruko"));
+            r_vulkan_state->textures[2] = r_vulkan_image(bmp);
+        }
+        {
+            Bitmap bmp = bitmap(str8_lit("ankha.png"));
+            r_vulkan_state->textures[3] = r_vulkan_image(bmp);
+        }
+    }
+    
     // descriptor set
     {
-        VkDescriptorPoolSize sizes[1] = { 
+        VkDescriptorPoolSize sizes[2] = { 
             [0] = {
                 .descriptorCount = R_VULKAN_FRAMES,
                 .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            },
+            [1] = {
+                .descriptorCount = R_VULKAN_FRAMES,
+                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             },
         };
         
@@ -1547,7 +1605,7 @@ function void r_vulkanInnit(OS_Handle win)
             .pNext = 0,
             .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
             .maxSets = R_VULKAN_FRAMES,
-            .poolSizeCount = 1,
+            .poolSizeCount = arrayLen(sizes),
             .pPoolSizes = sizes,
         };
         
@@ -1567,26 +1625,85 @@ function void r_vulkanInnit(OS_Handle win)
                 .range = sizeof(R_VULKAN_SceneData),
             };
             
-            VkWriteDescriptorSet write = {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = frame->scene_set,
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = 1,
-                .pBufferInfo = &buffer_info,
+            VkDescriptorImageInfo img_info = {
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = r_vulkan_state->textures[0].view,
+                .sampler = r_vulkan_state->textures[0].sampler,
             };
             
-            vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
+            VkDescriptorImageInfo img_info2 = {
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = r_vulkan_state->textures[1].view,
+                .sampler = r_vulkan_state->textures[1].sampler,
+            };
+            
+            VkDescriptorImageInfo img_info3 = {
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = r_vulkan_state->textures[2].view,
+                .sampler = r_vulkan_state->textures[2].sampler,
+            };
+            
+            VkDescriptorImageInfo img_info4 = {
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = r_vulkan_state->textures[3].view,
+                .sampler = r_vulkan_state->textures[3].sampler,
+            };
+            
+            VkWriteDescriptorSet writes[5] = {
+                [0] = {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = frame->scene_set,
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .descriptorCount = 1,
+                    .pBufferInfo = &buffer_info,
+                },
+                [1] = {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = frame->scene_set,
+                    .dstBinding = 1,
+                    .dstArrayElement = 0,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
+                    .pImageInfo = &img_info,
+                },
+                [2] = {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = frame->scene_set,
+                    .dstBinding = 1,
+                    .dstArrayElement = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
+                    .pImageInfo = &img_info2,
+                },
+                [3] = {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = frame->scene_set,
+                    .dstBinding = 1,
+                    .dstArrayElement = 2,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
+                    .pImageInfo = &img_info3,
+                },
+                [4] = {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = frame->scene_set,
+                    .dstBinding = 1,
+                    .dstArrayElement = 3,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
+                    .pImageInfo = &img_info4,
+                },
+                
+            };
+            
+            vkUpdateDescriptorSets(r_vulkan_state->device, 5, writes, 0, 0);
         }
         
         // texture descriptors
         
     }
-    
-    Bitmap bmp = bitmap(str8_lit("ell"));
-    R_VULKAN_Image img = r_vulkan_image(bmp);
-    
     //arena_temp_end(&scratch);
 }
 
@@ -1760,6 +1877,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
     {
         M4F trans = m4f_translate(v3f(i * rand() % 16, i * rand() % 16, i * rand() % 16));
         data.model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
+        data.tex_id[i] = i % 4;
     }
     
     void* mappedData;
