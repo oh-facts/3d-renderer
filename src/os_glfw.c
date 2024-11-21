@@ -1,3 +1,5 @@
+// TODO(mizu): os window from glfw window instead of using first window from os state. will be required during multi window set up
+
 function OS_Key os_keyFromSym(s32 sym)
 {
 	OS_Key out = OS_Key_NULL;
@@ -224,13 +226,6 @@ function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h)
 	return out;
 }
 
-typedef enum OS_CursorMode OS_CursorMode;
-enum OS_CursorMode
-{
-    OS_CursorMode_Normal,
-    OS_CursorMode_Disabled
-};
-
 function void os_setCursorMode(OS_CursorMode mode)
 {
     if(mode == OS_CursorMode_Disabled)
@@ -242,6 +237,15 @@ function void os_setCursorMode(OS_CursorMode mode)
         glfwSetInputMode(os_state->win[0].v, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     }
     
+}
+
+function V2F os_getCursorPos()
+{
+    double x, y;
+    glfwGetCursorPos(os_state->win[0].v, &x, &y);
+    
+    V2F out = {x, y};
+    return out;
 }
 
 function V2S os_getWindowSize(OS_Handle handle)

@@ -136,10 +136,7 @@ function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
     }
     else
     {
-        double xpos, ypos;
-        glfwGetCursorPos(os_state->win[0].v, &xpos, &ypos);
-        camera->old_mpos.x = xpos;
-        camera->old_mpos.y = ypos;
+        camera->old_mpos = os_getCursorPos();
     }
 }
 
