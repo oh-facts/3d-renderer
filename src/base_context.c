@@ -149,10 +149,6 @@ typedef int32_t b32;
 #define function static
 #include "os_vulkan.c"
 
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-#include "os_glfw.c"
-
 #if defined(OS_WIN32)
 #undef function
 #define WIN32_LEAN_AND_MEAN
@@ -180,5 +176,9 @@ typedef int32_t b32;
 #else
 #error platform not supported
 #endif
+
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#include "os_glfw.c"
 
 #include "render_vulkan.c"

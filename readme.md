@@ -41,7 +41,7 @@ The following args are also supported:  `debug` , `release`, `clean`, `clang`, `
 ### Windows
 
 ```batch
-./build.bat ext shader yk
+build ext shader yk
 ```
 
 This will compile the external libraries, the shaders and the renderer with clang in debug mode.
