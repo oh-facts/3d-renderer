@@ -122,15 +122,14 @@ typedef int32_t b32;
 #endif
 
 #define STB_SPRINTF_IMPLEMENTATION
-#include "stb_sprintf.c"
+#include <stb/stb_sprintf.c>
 
-#define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.c"
+#include <stb/stb_image.c>
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.c"
+#include <stb/stb_truetype.c>
 
 #include <stdio.h>
 #include <math.h>
@@ -149,10 +148,6 @@ typedef int32_t b32;
 #include <vk_mem_alloc.h>
 #define function static
 #include "os_vulkan.c"
-
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-#include "os_glfw.c"
 
 #if defined(OS_WIN32)
 #undef function
@@ -181,5 +176,9 @@ typedef int32_t b32;
 #else
 #error platform not supported
 #endif
+
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#include "os_glfw.c"
 
 #include "render_vulkan.c"

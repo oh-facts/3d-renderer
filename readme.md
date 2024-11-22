@@ -1,56 +1,52 @@
 <p>
 <h1 align="center">Ladybird</h2>
-<p align="center">3D Renderer - C - Vulkan - Linux - Win32</p>
+<p align="center">3D Renderer - C - Vulkan</p>
 <p align="center">
-<img width="600"src="window.jpg">
+<img width="400"src="ladybird.png">
 </p>
 </p>
 
 ## Compile
 
-The main branch will always compile. `Dev` might not compile on windows / mac since I don't develop on that platform. I use Arch btw. However, every now and then I boot up windows to see if it still works.
+The main branch will always compile on windows, linux and mac. 
 
-#### Dependencies
+`Dev` might not compile on windows / mac since I use Arch btw. However, every now and then, I boot up windows to make it compile.
 
-- vulkan sdk  ((vk headers + lib + shader compiler + vma headers)
-
-- glfw
-
-
+Mac build and vulkan support has been authored by @gruelingpine185
 
 Vulkan 1.2 is used. Dynamic rendering, BDA, Sync 2 and Descriptor indexing is also used. I have been used.
 
-### Linux / Mac / Win32
+#### Dependencies
 
-```bash
-./build.sh ext shader
-```
+- vulkan sdk (vk headers + lib + vma headers + glslc)
 
-This will compile the engine, external libraries and shaders.
+- glfw
 
-For subsequent builds, you can just do 
+### Linux
 
 ```shell
-./build.sh
+./build.sh ext shader yk
 ```
 
-Ofc, if you modify either the external libraries or shaders, you will have to pass `ext` and / or `shader`
+This will compile the external libraries, the shaders and the renderer with clang in debug mode.
 
+The following args are also supported:  `debug` , `release`, `clean`, `clang`, `gcc`
 
+### Mac
 
-The following args are also supported: `shader`,  `debug` , `release`, `clean`
+```
 
+```
 
+### Windows
 
-#### Notes
+```batch
+build ext shader yk
+```
 
-#### Linux  / Mac
+This will compile the external libraries, the shaders and the renderer with clang in debug mode.
 
- `gcc` and `clang` are also supported as args for the build script. `gcc` is default.
-
-
-
-#### Windows
+The following args are also supported: `debug` , `release`, `clean`
 
 Only msvc is supported because it is better.
 

@@ -7,7 +7,7 @@ struct Str8
 	u64 len;
 };
 
-#define str8_lit(c) Str8{(u8*)c, sizeof(c) - 1}
+#define str8_lit(c) (Str8){(u8*)c, sizeof(c) - 1}
 
 function u64 cstr8Len(char *c)
 {

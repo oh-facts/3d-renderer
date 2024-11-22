@@ -68,11 +68,22 @@ struct OS_EventList
 	u64 count;
 };
 
+typedef enum OS_CursorMode OS_CursorMode;
+enum OS_CursorMode
+{
+    OS_CursorMode_Normal,
+    OS_CursorMode_Disabled
+};
+
 // OS / video hooks ===================
 function void os_innit();
 function OS_EventList os_pollEvents(Arena *arena);
 function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h);
-function V2S os_getWindowSize(OS_Handle handle);
+function V2S os_getWindowSize(OS_Handle win);
+function V2S os_getWindowSize(OS_Handle win);
+
+function void os_setCursorMode(OS_CursorMode mode);
+function V2F os_getCursorPos();
 // =====================================
 
 function OS_Event *os_pushEvent(Arena *arena, OS_EventList *list)
