@@ -21,7 +21,9 @@ project.4coder
 *.exe
 yk
 *.lib
+!glfw3.lib
 *.spv
+*.ilk
 compile_commands.json
 
 // debugger artifacts

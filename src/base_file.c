@@ -1,3 +1,6 @@
+// change to OS stuff
+// and add app directory to OS_State
+
 typedef enum FILE_TYPE FILE_TYPE;
 enum FILE_TYPE
 {
@@ -19,7 +22,7 @@ struct FileData
 #define fileOpenImpl(file, filepath, mode) *file = fopen(filepath, mode)
 #endif
 
-function FileData readFile(Arena *arena, char *filepath, FILE_TYPE type)
+function FileData readFile(Arena *arena, Str8 filepath, FILE_TYPE type)
 {
 	FileData out = {0};
 	FILE *file;
@@ -30,7 +33,11 @@ function FileData readFile(Arena *arena, char *filepath, FILE_TYPE type)
 		"rb"
 	};
 	
-	fileOpenImpl(&file, filepath, file_type_table[type]);
+ ArenaTemp temp = scratch_begin(0, 0);
+ Str8 dir = os_getAppDir(temp.arena);
+ Str8 abs_path = str8_join(temp.arena, dir, filepath);	
+	
+	fileOpenImpl(&file, abs_path.c, file_type_table[type]);
 	
 	fseek(file, 0, SEEK_END);
 	
@@ -96,25 +103,6 @@ function b32 copyFile(const char* sourcePath, char* destinationPath)
 	return out;
 }
 
-typedef struct Bitmap Bitmap;
-struct Bitmap
-{
-    void *data;
-    s32 w;
-    s32 h;
-    s32 n;
-};
-
-function Bitmap bitmap(Str8 path)
-{
-	Bitmap out = {0};
-	
-	stbi_set_flip_vertically_on_load(1);
-	
-	out.data = stbi_load((char*)path.c, &out.w, &out.h, &out.n, 0);
-	return out;
-}
-
 function Str8 fileNameFromPath(Arena *arena, Str8 path)
 {
 	char *cur = (char*)&path.c[path.len - 1];
@@ -134,4 +122,28 @@ function Str8 fileNameFromPath(Arena *arena, Str8 path)
 	file_name_cstr.c[count] = '\0';
 	
 	return file_name_cstr;
+}
+
+typedef struct Bitmap Bitmap;
+struct Bitmap
+{
+	void *data;
+	s32 w;
+	s32 h;
+	s32 n;
+};
+
+function Bitmap bitmap(Str8 path)
+{
+	Bitmap out = {0};
+	
+	stbi_set_flip_vertically_on_load(1);
+	ArenaTemp temp = scratch_begin(0, 0);
+	Str8 dir = os_getAppDir(temp.arena);
+	Str8 abs_path = str8_join(temp.arena, str8_lit("../res/"), path);	
+	abs_path = str8_join(temp.arena, dir, abs_path);	
+	out.data = stbi_load((char*)abs_path.c, &out.w, &out.h, &out.n, 0);
+	
+	scratch_end(&temp);
+	return out;
 }

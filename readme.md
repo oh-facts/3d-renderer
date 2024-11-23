@@ -2,7 +2,7 @@
 <h1 align="center">Ladybird</h2>
 <p align="center">3D Renderer - C - Vulkan</p>
 <p align="center">
-<img width="400"src="ladybird.png">
+<img width="400"src="res/ladybird/ladybird.png">
 </p>
 </p>
 

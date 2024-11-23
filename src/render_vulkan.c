@@ -151,16 +151,27 @@ function M4F camGetView(Camera *camera)
 	return m4f_lookAt(camera->pos, v3f_add(camera->pos, dir), CAMERA_UP);
 }
 
-#define NUM_OBJECTS 256
+#define MAX_RECT3 256
 
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
 {
 	M4F proj;
 	M4F view;
-	M4F model[NUM_OBJECTS];
-	u32 tex_id[NUM_OBJECTS];
-	u32 pad;
+};
+
+typedef struct R_VULKAN_Rect3InstanceData R_VULKAN_Rect3InstanceData;
+struct R_VULKAN_Rect3InstanceData
+{
+	M4F model[MAX_RECT3];
+	u32 tex_id[MAX_RECT3];
+};
+
+typedef struct R_VULKAN_Rect3PushConstants R_VULKAN_Rect3PushConstants;
+struct R_VULKAN_Rect3PushConstants
+{
+	VkDeviceAddress scene;
+	VkDeviceAddress instance;
 };
 
 typedef struct R_VULKAN_Image R_VULKAN_Image;
@@ -178,9 +189,328 @@ typedef struct R_VULKAN_Buffer R_VULKAN_Buffer;
 struct R_VULKAN_Buffer
 {
 	VkBuffer buffer;
+	VkDeviceAddress address;
 	VmaAllocation alloc;
 	VmaAllocationInfo info;
 };
+
+typedef struct GLTF_Vertex GLTF_Vertex;
+struct GLTF_Vertex
+{
+ V3F pos;
+ f32 uv_x;
+ V3F normal;
+ f32 uv_y;
+ V4F color;
+};
+
+typedef struct GLTF_Primitive GLTF_Primitive;
+struct GLTF_Primitive
+{
+ u32 start;
+ u32 count;
+	
+	u32 base_tex_id;
+ Str8 base_tex;
+};
+
+typedef struct R_Handle R_Handle;
+struct R_Handle
+{
+ u64 u64[2];
+};
+
+typedef struct GLTF_Mesh GLTF_Mesh;
+struct GLTF_Mesh
+{
+ GLTF_Primitive *primitives;
+ u64 num_primitives;
+	
+	R_VULKAN_Buffer i_buffer;
+ u32 *indices;
+ u32 num_indices;
+	
+	R_VULKAN_Buffer v_buffer;
+ GLTF_Vertex *vertices;
+ u32 num_vertices;
+};
+
+typedef struct GLTF_Model GLTF_Model;
+struct GLTF_Model
+{
+	R_VULKAN_Image *images;
+	Bitmap *textures;
+ u32 num_textures;
+	
+ GLTF_Mesh *meshes;
+ u64 num_meshes;
+};
+
+typedef struct GLTF_It GLTF_It;
+struct GLTF_It
+{
+	Arena *arena;
+	u64 mesh_index;
+	GLTF_Model *model;
+	cgltf_data *data;
+	Str8 abs_path;
+	Str8 dir;
+};
+
+function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
+{
+	if(node->mesh)
+	{
+		cgltf_mesh *node_mesh = node->mesh;
+		
+		GLTF_Mesh *mesh = it->model->meshes + it->mesh_index;
+		mesh->num_primitives = node_mesh->primitives_count;
+		mesh->primitives = pushArray(it->arena, GLTF_Primitive, mesh->num_primitives);
+		
+		for(u32 i = 0; i < mesh->num_primitives; i++)
+		{
+			cgltf_primitive *node_prim = node->mesh->primitives + i;
+			cgltf_accessor *index_attrib = node_prim->indices;
+			
+			mesh->num_indices += index_attrib->count;
+		}
+		
+		for(u32 i = 0; i < mesh->num_primitives; i++)
+		{
+			cgltf_primitive *node_prim = node->mesh->primitives + i;
+			
+			for(u32 j = 0; j < node_prim->attributes_count; j++)
+			{
+				cgltf_attribute *attrib = node_prim->attributes + j;
+				
+				if(attrib->type == cgltf_attribute_type_position)
+				{
+					cgltf_accessor *vert_attrib = attrib->data;
+					mesh->num_vertices += vert_attrib->count;
+				}
+			}
+		}
+		
+		mesh->indices = pushArray(it->arena, u32, mesh->num_indices);
+		mesh->vertices = pushArray(it->arena, GLTF_Vertex, mesh->num_vertices);
+		
+		u64 init_vtx = 0;
+		u64 init_index = 0;
+		
+		for(u32 i = 0; i < mesh->num_primitives; i++)
+		{
+			cgltf_primitive *node_prim = node->mesh->primitives + i;
+			
+			GLTF_Primitive *p = mesh->primitives + i;
+			
+			char *thing = node_prim->material->pbr_metallic_roughness.base_color_texture.texture->image->uri;
+			
+			Str8 uri_str =  str8((u8*)thing, strlen(thing));
+			p->base_tex = str8_join(it->arena, it->dir, uri_str);
+			pushArray(it->arena, u8, 1);
+			
+			cgltf_accessor *index_attrib = node_prim->indices;
+			
+			p->start = init_index;
+			p->count = index_attrib->count;
+			
+			// indices
+			{
+				for (u32 j = 0; j < index_attrib->count; j++)
+				{
+					size_t index = cgltf_accessor_read_index(index_attrib, j);
+					
+					mesh->indices[j + init_index] = index + init_vtx;
+				}
+				
+				init_index += index_attrib->count;
+			}
+			
+			// vertices
+			for(u32 j = 0; j < node_prim->attributes_count; j++)
+			{
+				cgltf_attribute *attrib = node_prim->attributes + j;
+				
+				if(attrib->type == cgltf_attribute_type_position)
+				{
+					init_vtx = 0;
+					cgltf_accessor *vert_attrib = attrib->data;
+					
+					for(u32 k = 0; k < vert_attrib->count; k++)
+					{
+						cgltf_accessor_read_float(vert_attrib, k, mesh->vertices[k + init_vtx].pos.e, sizeof(f32));
+					}
+					
+					init_vtx += vert_attrib->count;
+				}
+				
+				// NOTE(mizu): stop cheezing init vtx;
+				
+				if(attrib->type == cgltf_attribute_type_normal)
+				{
+					init_vtx = 0;
+					cgltf_accessor *norm_attrib = attrib->data;
+					
+					for(u32 k = 0; k < norm_attrib->count; k++)
+					{
+						cgltf_accessor_read_float(norm_attrib, k, mesh->vertices[k + init_vtx].normal.e, sizeof(f32));
+					}
+					init_vtx += norm_attrib->count;
+				}
+				
+				if(attrib->type == cgltf_attribute_type_color)
+				{
+					init_vtx = 0;
+					
+					cgltf_accessor *color_attrib = attrib->data;
+					for (u32 k = 0; k < color_attrib->count; k++)
+					{
+						cgltf_accessor_read_float(color_attrib, k, mesh->vertices[k + init_vtx].color.e, sizeof(f32));
+						
+						//printf("%f %f %f %f\n", mesh->vertices[k + init_vtx].color.e[0], mesh->vertices[k + init_vtx].color.e[1], mesh->vertices[k + init_vtx].color.e[2], mesh->vertices[k + init_vtx].color.e[3]);
+						
+						
+					}
+					init_vtx += color_attrib->count;
+				}
+				
+				if(attrib->type == cgltf_attribute_type_texcoord)
+				{
+					cgltf_accessor *tex_attrib = attrib->data;
+					
+					// TODO(mizu):  difference b/w attrib index 0 and 1
+					if (attrib->index == 0)
+					{
+						init_vtx = 0;
+						
+						for(u32 k = 0; k < tex_attrib->count; k++)
+						{
+							f32 tex[2] = {0};
+							
+							cgltf_accessor_read_float(tex_attrib, k, tex, sizeof(f32));
+							mesh->vertices[k + init_vtx].uv_x = tex[0];
+							mesh->vertices[k + init_vtx].uv_y = 1 - tex[1];
+						}
+						init_vtx += tex_attrib->count;
+					}
+				}
+				
+			}
+			
+			
+		}
+		
+		it->mesh_index++;
+	}
+	
+	for (u32 i = 0; i < node->children_count; ++i) 
+	{
+		gltf_traverse_node(it, node->children[i]);
+	}
+}
+
+function void gltf_print(GLTF_Model *model)
+{
+	for(u32 i = 0; i < model->num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = model->meshes + i;
+		
+		printf("indices %u\n", i);
+		for(u32 j = 0; j < mesh->num_indices; j++)
+		{
+			printf("%u, ", mesh->indices[j]);
+		}
+		printf("\n");
+		
+		printf("verticess %u\n", i);
+		for(u32 j = 0; j < mesh->num_vertices; j++)
+		{
+			GLTF_Vertex *vert = mesh->vertices + j;
+			printf("[%f, %f, %f]", vert->pos.x, vert->pos.y, vert->pos.z);
+		}
+		printf("\n");
+		
+		for(u32 j = 0; j < mesh->num_primitives; j++)
+		{
+			GLTF_Primitive *p = mesh->primitives;
+			
+			printf("start: %u\n", p->start);
+			printf("count: %u\n", p->count);
+		}
+		
+		
+		printf("\n");
+	}
+}
+
+function GLTF_Model gltf_load_mesh(Arena *arena, Str8 filepath)
+{
+	GLTF_Model out = {0};
+	ArenaTemp temp = scratch_begin(0, 0);
+	
+	GLTF_It it = {0};
+	
+	it.abs_path = str8_lit("C:\\dev\\3d-renderer\\res\\asuka\\scene.gltf");
+	
+	//  it.abs_path = str8_join(temp.arena, a_state->asset_dir, filepath);
+	pushArray(temp.arena, u8, 1);
+	
+	//it.dir = str8_join(temp.arena, it.abs_path, str8_lit("/../"));
+	
+	
+	cgltf_options options = {0};
+	cgltf_data *data = 0;
+	
+	if(cgltf_parse_file(&options, (char*)it.abs_path.c, &data) == cgltf_result_success)
+	{
+		if(cgltf_load_buffers(&options, data, (char*)it.abs_path.c) == cgltf_result_success)
+		{
+			
+			// load textures
+			out.num_textures = data->textures_count;
+			out.textures = pushArray(arena, Bitmap, data->textures_count);
+			
+			for(u32 i = 0; i < data->textures_count; i++)
+			{
+				Str8 uri_str = str8((u8*)data->textures[i].image->uri, strlen(data->textures[i].image->uri));
+				Str8 pather = str8_lit("asuka\\");
+				
+				pather = str8_join(arena, pather, uri_str);
+				pushArray(arena, u8, 1);
+				
+				out.textures[i] = bitmap(pather);
+			}
+			
+			// load meshes
+			out.num_meshes = data->meshes_count;
+			out.meshes = pushArray(arena, GLTF_Mesh, out.num_meshes);
+			
+			it.model = &out;
+			it.arena = arena;
+			it.data = data;
+			
+			for(u32 i = 0; i < data->scenes_count; i++)
+			{
+				cgltf_scene *scene = data->scenes + i;
+				
+				for(u32 j = 0; j < scene->nodes_count; j++)
+				{
+					cgltf_node *node = scene->nodes[j];
+					
+					gltf_traverse_node(&it, node);
+				}
+			}
+			
+			//gltf_print(it.model);
+			
+		}
+	}
+	
+	//scratch_end(&temp);
+	
+	
+	return out;
+}
 
 typedef struct R_VULKAN_FrameData R_VULKAN_FrameData;
 struct R_VULKAN_FrameData
@@ -192,13 +522,15 @@ struct R_VULKAN_FrameData
 	VkSemaphore image_ready;
 	VkSemaphore render_finished;
 	
-	R_VULKAN_Buffer scene_buffer;
 	VkDescriptorSet scene_set;
+	R_VULKAN_Buffer scene_buffer;
+	R_VULKAN_Buffer rect3_inst_buffer;
 };
 
 typedef struct R_VULKAN_State R_VULKAN_State;
 struct R_VULKAN_State
 {
+	GLTF_Model model;
 	OS_Handle vkdll;
 	V2S last_frame_window_size;
 	
@@ -235,10 +567,12 @@ struct R_VULKAN_State
 	VkExtent2D depth_image_extent;
 	VmaAllocation depth_image_memory;
 	
-	VkPipelineLayout hello_triangle_pipeline_layout;
-	VkDescriptorPool hello_triangle_descriptor_pool;
-	VkPipeline hello_triangle_pipeline;
-	VkDescriptorSetLayout hello_triangle_descriptor_set_layout;
+	VkPipelineLayout pipeline_layout;
+	VkDescriptorPool descriptor_pool;
+	VkDescriptorSetLayout descriptor_set_layout;
+	
+	VkPipeline rect3_pipeline;
+	VkPipeline mesh_pipeline;
 	
 	R_VULKAN_FrameData frames[R_VULKAN_FRAMES];
 	u32 current_frame_index;
@@ -247,10 +581,18 @@ struct R_VULKAN_State
 	VkCommandBuffer im_cmd_buffer;
 	VkFence im_fence;
 	
-	R_VULKAN_Image textures[10];
+	R_VULKAN_Image textures[4];
 };
 
 global R_VULKAN_State *r_vulkan_state;
+
+typedef struct R_VULKAN_MeshPushConstants R_VULKAN_MeshPushConstants;
+struct R_VULKAN_MeshPushConstants
+{
+	M4F model;
+	VkDeviceAddress scene_buffer;
+	VkDeviceAddress v_buffer;
+};
 
 function void r_vulkanAssertImpl(VkResult res)
 {
@@ -325,15 +667,19 @@ global PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
 global PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
 global PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
 global PFN_vkEndCommandBuffer vkEndCommandBuffer;
+global PFN_vkCmdPushConstants vkCmdPushConstants;
 global PFN_vkCmdBindPipeline vkCmdBindPipeline;
+global PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer;
 global PFN_vkCmdSetViewport vkCmdSetViewport;
 global PFN_vkCmdSetScissor vkCmdSetScissor;
 global PFN_vkCmdDraw vkCmdDraw;
+global PFN_vkCmdDrawIndexed vkCmdDrawIndexed;
 global PFN_vkCmdBlitImage2KHR vkCmdBlitImage2KHR;
 global PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR;
 global PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
 global PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
-
+global PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
+global PFN_vkGetBufferDeviceAddress vkGetBufferDeviceAddress;
 // submit
 global PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
 
@@ -556,6 +902,95 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 	//ykr_destroy_buffer(renderer->vma_allocator, &copy_data.copy_buffer);
 	
 	return out;
+}
+
+function void r_vulkan_uploadVertexIndexData()
+{
+	r_vulkan_state->model = gltf_load_mesh(r_vulkan_state->arena, str8_lit(""));
+	
+	VkDescriptorImageInfo img_info[3] = {0}; 
+	
+	r_vulkan_state->model.images = pushArray(r_vulkan_state->arena, R_VULKAN_Image, r_vulkan_state->model.num_textures);
+	
+	for(u32 i = 0; i < r_vulkan_state->model.num_textures; i++)
+	{
+		R_VULKAN_Image *image = r_vulkan_state->model.images + i;
+		*image = r_vulkan_image(r_vulkan_state->model.textures[i]);
+		img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		img_info[i].imageView = image->view;
+		img_info[i].sampler = image->sampler;
+	}
+	
+	for(u32 j = 0; j < R_VULKAN_FRAMES; j++)
+	{
+		R_VULKAN_FrameData *frame = r_vulkan_state->frames + j;
+		VkWriteDescriptorSet writes[1] = {0};
+		for(u32 i = 0; i < 1; i++)
+		{
+			R_VULKAN_Image *image = r_vulkan_state->model.images;
+			VkWriteDescriptorSet *write = writes;
+			write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write->dstSet = frame->scene_set;
+			write->dstBinding = 0;
+			write->dstArrayElement = 7;
+			write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			write->descriptorCount = 1;
+			write->pImageInfo = &img_info[i];
+		}
+		vkUpdateDescriptorSets(r_vulkan_state->device, 1, writes, 0, 0);
+	}
+	
+	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = r_vulkan_state->model.meshes + i;
+		
+		u64 vertices_size = sizeof(GLTF_Vertex) * mesh->num_vertices;
+		u64 indices_size = sizeof(u32) * mesh->num_indices;
+		
+		mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+																																									VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+																																									VMA_MEMORY_USAGE_GPU_ONLY);
+		
+		VkBufferDeviceAddressInfo device_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+			.buffer = mesh->v_buffer.buffer,
+		};
+		
+		mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+		
+		mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+																																									VMA_MEMORY_USAGE_GPU_ONLY);
+		
+		R_VULKAN_Buffer staging =
+			r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+																									VMA_MEMORY_USAGE_CPU_TO_GPU);
+		
+		void *data = 0;
+		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
+		
+		memcpy(data, mesh->vertices, vertices_size);
+		memcpy((u8*)data + vertices_size, mesh->indices, indices_size);
+		
+		vmaUnmapMemory(r_vulkan_state->vma, staging.alloc);
+		
+		r_vulkan_imBeginSubmit();
+		
+		VkBufferCopy vert_copy = {
+			.size = vertices_size,
+		};
+		
+		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, mesh->v_buffer.buffer, 1, &vert_copy);
+		
+		VkBufferCopy index_copy = {
+			.srcOffset = vertices_size,
+			.size = indices_size,
+		};
+		
+		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, mesh->i_buffer.buffer, 1, &index_copy);
+		
+		r_vulkan_imEndSubmit();
+	}
+	
 }
 
 typedef struct R_VULKAN_ExtentionList R_VULKAN_ExtentionList;
@@ -868,12 +1303,12 @@ function VkDescriptorSet r_vulkan_allocDescriptorSet(VkDescriptorPool pool, VkDe
 /*
 void ubo_update(VmaAllocator allocator, YkBuffer* buffer, void* ubo, size_t size)
 {
-    void* data = 0;
-    vmaMapMemory(allocator, buffer->alloc, &data);
+				void* data = 0;
+				vmaMapMemory(allocator, buffer->alloc, &data);
 
-    memcpy(data, ubo, size);
+				memcpy(data, ubo, size);
 
-    vmaUnmapMemory(allocator, buffer->alloc);
+				vmaUnmapMemory(allocator, buffer->alloc);
 }
 */
 
@@ -1206,15 +1641,21 @@ function void r_vulkanInnit(OS_Handle win)
 	vkCmdEndRenderingKHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdEndRenderingKHR");
 	vkBeginCommandBuffer = vkGetDeviceProcAddr(r_vulkan_state->device, "vkBeginCommandBuffer");
 	vkEndCommandBuffer = vkGetDeviceProcAddr(r_vulkan_state->device, "vkEndCommandBuffer");
+	vkCmdPushConstants = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdPushConstants");
 	vkCmdBindPipeline = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBindPipeline");
+	vkCmdBindIndexBuffer = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBindIndexBuffer");
 	vkCmdSetViewport = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdSetViewport");
 	vkCmdSetScissor = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdSetScissor");
 	vkCmdDraw = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdDraw");
+	vkCmdDrawIndexed = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdDrawIndexed");
+	
 	vkCmdBlitImage2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBlitImage2KHR");
 	vkCmdPipelineBarrier2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdPipelineBarrier2KHR");
 	vkCmdBindDescriptorSets = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdBindDescriptorSets");
 	vkCmdCopyBufferToImage = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdCopyBufferToImage");
+	vkCmdCopyBuffer = vkGetDeviceProcAddr(r_vulkan_state->device, "vkCmdCopyBuffer");
 	
+	vkGetBufferDeviceAddress = vkGetDeviceProcAddr(r_vulkan_state->device, "vkGetBufferDeviceAddress");
 	// submit
 	vkQueueSubmit2KHR = vkGetDeviceProcAddr(r_vulkan_state->device, "vkQueueSubmit2KHR");
 	
@@ -1251,11 +1692,10 @@ function void r_vulkanInnit(OS_Handle win)
 	
 	r_vulkan_createSwapchain(win);
 	
-	// hello triangle pipeline 
+	// rect3 pipeline 
 	{
 		// pipeline shader stage
-		FileData vert_src = readFile(r_vulkan_state->arena, "hello_triangle.vert.spv", FILE_TYPE_BINARY);
-		
+		FileData vert_src = readFile(r_vulkan_state->arena, str8_lit("rect3.vert.spv"), FILE_TYPE_BINARY);
 		VkShaderModuleCreateInfo vert_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = vert_src.size,
@@ -1266,7 +1706,7 @@ function void r_vulkanInnit(OS_Handle win)
 		res = vkCreateShaderModule(r_vulkan_state->device, &vert_shader_module_info, 0, &vert_module);
 		r_vulkanAssert(res);
 		
-		FileData frag_src = readFile(r_vulkan_state->arena, "hello_triangle.frag.spv", FILE_TYPE_BINARY);
+		FileData frag_src = readFile(r_vulkan_state->arena, str8_lit("rect3.frag.spv"), FILE_TYPE_BINARY);
 		
 		VkShaderModuleCreateInfo frag_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1335,8 +1775,8 @@ function void r_vulkanInnit(OS_Handle win)
 			.depthClampEnable = VK_FALSE,
 			.rasterizerDiscardEnable = VK_FALSE,
 			.polygonMode = VK_POLYGON_MODE_FILL,
-			//.cullMode = VK_CULL_MODE_BACK_BIT,
 			.cullMode = VK_CULL_MODE_NONE,
+			//.cullMode = VK_CULL_MODE_BACK_BIT,
 			.frontFace = VK_FRONT_FACE_CLOCKWISE,
 			.depthBiasEnable = VK_FALSE,
 			.depthBiasConstantFactor = 0,
@@ -1405,16 +1845,9 @@ function void r_vulkanInnit(OS_Handle win)
 		
 		// descriptor set layout
 		
-		VkDescriptorSetLayoutBinding descriptor_bindings[2] = {
+		VkDescriptorSetLayoutBinding descriptor_bindings[1] = {
 			[0] = {
 				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-				.pImmutableSamplers = 0,
-			},
-			[1] = {
-				.binding = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 10,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1427,26 +1860,33 @@ function void r_vulkanInnit(OS_Handle win)
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			.pNext = 0,
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-			.bindingCount = 2,
+			.bindingCount = arrayLen(descriptor_bindings),
 			.pBindings = descriptor_bindings,
 		};
 		
 		res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
 																																				&descriptor_layout_info,
 																																				0,
-																																				&r_vulkan_state->hello_triangle_descriptor_set_layout);
+																																				&r_vulkan_state->descriptor_set_layout);
 		r_vulkanAssert(res);
+		
+		VkPushConstantRange range = {
+			.offset = 0,
+			//.size = sizeof(R_VULKAN_Rect3PushConstants),
+			.size = 256,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		};
 		
 		// pipeline layout
 		VkPipelineLayoutCreateInfo layout_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = 1,
-			.pSetLayouts = &r_vulkan_state->hello_triangle_descriptor_set_layout,
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = 0,
+			.pSetLayouts = &r_vulkan_state->descriptor_set_layout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &range,
 		};
 		
-		vkCreatePipelineLayout(r_vulkan_state->device, &layout_info, 0, &r_vulkan_state->hello_triangle_pipeline_layout);
+		vkCreatePipelineLayout(r_vulkan_state->device, &layout_info, 0, &r_vulkan_state->pipeline_layout);
 		
 		// pipeline
 		
@@ -1474,14 +1914,202 @@ function void r_vulkanInnit(OS_Handle win)
 			.pDepthStencilState = &depth_stencil,
 			.pColorBlendState = &color_blending,
 			.pDynamicState = &dynamic_state_create_info,
-			.layout = r_vulkan_state->hello_triangle_pipeline_layout,
+			.layout = r_vulkan_state->pipeline_layout,
 			.renderPass = 0,
 			.subpass = 0,
 			.basePipelineHandle = 0,
 			.basePipelineIndex = 0
 		};
 		
-		res = vkCreateGraphicsPipelines(r_vulkan_state->device, 0, 1, &pipeline_create_info, 0, &r_vulkan_state->hello_triangle_pipeline);
+		res = vkCreateGraphicsPipelines(r_vulkan_state->device, 0, 1, &pipeline_create_info, 0, &r_vulkan_state->rect3_pipeline);
+		r_vulkanAssert(res);
+	}
+	
+	// mesh pipeline 
+	{
+		// pipeline shader stage
+		FileData vert_src = readFile(r_vulkan_state->arena, str8_lit("mesh.vert.spv"), FILE_TYPE_BINARY);
+		VkShaderModuleCreateInfo vert_shader_module_info = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = vert_src.size,
+			.pCode = vert_src.bytes,
+		};
+		
+		VkShaderModule vert_module = {0};
+		res = vkCreateShaderModule(r_vulkan_state->device, &vert_shader_module_info, 0, &vert_module);
+		r_vulkanAssert(res);
+		
+		FileData frag_src = readFile(r_vulkan_state->arena, str8_lit("mesh.frag.spv"), FILE_TYPE_BINARY);
+		
+		VkShaderModuleCreateInfo frag_shader_module_info = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = frag_src.size,
+			.pCode = frag_src.bytes,
+		};
+		
+		VkShaderModule frag_module = {0};
+		res = vkCreateShaderModule(r_vulkan_state->device, &frag_shader_module_info, 0, &frag_module);
+		r_vulkanAssert(res);
+		
+		VkPipelineShaderStageCreateInfo shader_stages[2] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.pNext = 0,
+				.flags = 0,
+				.stage = VK_SHADER_STAGE_VERTEX_BIT,
+				.module = vert_module,
+				.pName = "main",
+				.pSpecializationInfo = 0,
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.pNext = 0,
+				.flags = 0,
+				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+				.module = frag_module,
+				.pName = "main",
+				.pSpecializationInfo = 0,
+			},
+		};
+		
+		// vertex input
+		VkPipelineVertexInputStateCreateInfo vertex_input = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.pNext = 0,
+			.flags = 0,
+			.vertexBindingDescriptionCount = 0,
+			.pVertexBindingDescriptions = 0,
+			.vertexAttributeDescriptionCount = 0,
+			.pVertexAttributeDescriptions = 0
+		};
+		
+		// Input assembly
+		
+		VkPipelineInputAssemblyStateCreateInfo input_assembly = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.pNext = 0,
+			.flags = 0,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE,
+		};
+		
+		// view port state
+		VkPipelineViewportStateCreateInfo viewport = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = 1,
+			.scissorCount = 1,
+		};
+		
+		// rasterizer
+		VkPipelineRasterizationStateCreateInfo rasterizer = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.pNext = 0,
+			.flags = 0,
+			.depthClampEnable = VK_FALSE,
+			.rasterizerDiscardEnable = VK_FALSE,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_NONE,
+			//.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			.depthBiasEnable = VK_FALSE,
+			.depthBiasConstantFactor = 0,
+			.depthBiasClamp = 0,
+			.depthBiasSlopeFactor = 0,
+			.lineWidth = 1.f,
+		};
+		
+		// multisample
+		VkPipelineMultisampleStateCreateInfo multisample = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.pNext = 0,
+			.flags = 0,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+			.sampleShadingEnable = VK_FALSE,
+			.minSampleShading = 0,
+			.pSampleMask = 0,
+			.alphaToCoverageEnable = VK_FALSE,
+			.alphaToOneEnable = VK_FALSE,
+		};
+		
+		// depth stencil stage
+		VkPipelineDepthStencilStateCreateInfo depth_stencil = {
+			.depthTestEnable = VK_TRUE,
+			.depthWriteEnable = VK_TRUE,
+			.depthCompareOp = VK_COMPARE_OP_LESS,
+			.depthBoundsTestEnable = VK_FALSE,
+			.stencilTestEnable = VK_FALSE,
+			.front = {0},
+			.back = {0},
+			.minDepthBounds = 0.f,
+			.maxDepthBounds = 0.f,
+		};
+		
+		// color blend state
+		VkPipelineColorBlendAttachmentState color_blend_attatchment = {
+			.blendEnable = VK_TRUE,
+			.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+			.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			.colorBlendOp = VK_BLEND_OP_ADD,
+			.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+			.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+			.alphaBlendOp = VK_BLEND_OP_ADD,
+			.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+		};
+		
+		VkPipelineColorBlendStateCreateInfo color_blending = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.logicOpEnable = VK_FALSE,
+			.logicOp = VK_LOGIC_OP_COPY,
+			.attachmentCount = 1,
+			.pAttachments = &color_blend_attatchment,
+			.blendConstants[0] = 0.0f,
+			.blendConstants[1] = 0.0f,
+			.blendConstants[2] = 0.0f,
+			.blendConstants[3] = 0.0f,
+		};
+		
+		// Dynamic state
+		VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+		VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			.dynamicStateCount = 2,
+			.pDynamicStates = dynamic_states,
+		};
+		
+		// pipeline
+		
+		VkPipelineRenderingCreateInfo render_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+			.colorAttachmentCount = 1,
+			.pColorAttachmentFormats = &r_vulkan_state->draw_image_format,
+			.depthAttachmentFormat = r_vulkan_state->depth_image_format,
+			.stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
+		};
+		
+		VkGraphicsPipelineCreateInfo pipeline_create_info = 
+		{
+			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+			.pNext = &render_info,
+			.flags = 0,
+			.stageCount = 2,
+			.pStages = shader_stages,
+			.pVertexInputState = &vertex_input,
+			.pInputAssemblyState = &input_assembly,
+			.pTessellationState = 0,
+			.pViewportState = &viewport,
+			.pRasterizationState = &rasterizer,
+			.pMultisampleState = &multisample,
+			.pDepthStencilState = &depth_stencil,
+			.pColorBlendState = &color_blending,
+			.pDynamicState = &dynamic_state_create_info,
+			.layout = r_vulkan_state->pipeline_layout,
+			.renderPass = 0,
+			.subpass = 0,
+			.basePipelineHandle = 0,
+			.basePipelineIndex = 0
+		};
+		
+		res = vkCreateGraphicsPipelines(r_vulkan_state->device, 0, 1, &pipeline_create_info, 0, &r_vulkan_state->mesh_pipeline);
 		r_vulkanAssert(res);
 	}
 	
@@ -1586,13 +2214,9 @@ function void r_vulkanInnit(OS_Handle win)
 	
 	// descriptor set
 	{
-		VkDescriptorPoolSize sizes[2] = { 
+		VkDescriptorPoolSize sizes[1] = {
 			[0] = {
-				.descriptorCount = R_VULKAN_FRAMES,
-				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			},
-			[1] = {
-				.descriptorCount = R_VULKAN_FRAMES,
+				.descriptorCount = 4,
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			},
 		};
@@ -1606,102 +2230,61 @@ function void r_vulkanInnit(OS_Handle win)
 			.pPoolSizes = sizes,
 		};
 		
-		res = vkCreateDescriptorPool(r_vulkan_state->device, &info, 0, &r_vulkan_state->hello_triangle_descriptor_pool);
+		res = vkCreateDescriptorPool(r_vulkan_state->device, &info, 0, &r_vulkan_state->descriptor_pool);
 		r_vulkanAssert(res);
 		
 		// scene descriptor
 		for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
 		{
 			R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
-			frame->scene_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_SceneData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			frame->scene_set = r_vulkan_allocDescriptorSet(r_vulkan_state->hello_triangle_descriptor_pool, &r_vulkan_state->hello_triangle_descriptor_set_layout);
+			frame->scene_set = r_vulkan_allocDescriptorSet(r_vulkan_state->descriptor_pool, &r_vulkan_state->descriptor_set_layout);
 			
-			VkDescriptorBufferInfo buffer_info = {
-				.buffer = frame->scene_buffer.buffer,
-				.offset = 0,
-				.range = sizeof(R_VULKAN_SceneData),
-			};
-			
-			VkDescriptorImageInfo img_info = {
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.imageView = r_vulkan_state->textures[0].view,
-				.sampler = r_vulkan_state->textures[0].sampler,
-			};
-			
-			VkDescriptorImageInfo img_info2 = {
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.imageView = r_vulkan_state->textures[1].view,
-				.sampler = r_vulkan_state->textures[1].sampler,
-			};
-			
-			VkDescriptorImageInfo img_info3 = {
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.imageView = r_vulkan_state->textures[2].view,
-				.sampler = r_vulkan_state->textures[2].sampler,
-			};
-			
-			VkDescriptorImageInfo img_info4 = {
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				.imageView = r_vulkan_state->textures[3].view,
-				.sampler = r_vulkan_state->textures[3].sampler,
-			};
-			
-			VkWriteDescriptorSet writes[5] = {
-				[0] = {
-					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = frame->scene_set,
-					.dstBinding = 0,
-					.dstArrayElement = 0,
-					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-					.descriptorCount = 1,
-					.pBufferInfo = &buffer_info,
-				},
-				[1] = {
-					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = frame->scene_set,
-					.dstBinding = 1,
-					.dstArrayElement = 0,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.pImageInfo = &img_info,
-				},
-				[2] = {
-					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = frame->scene_set,
-					.dstBinding = 1,
-					.dstArrayElement = 1,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.pImageInfo = &img_info2,
-				},
-				[3] = {
-					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = frame->scene_set,
-					.dstBinding = 1,
-					.dstArrayElement = 2,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.pImageInfo = &img_info3,
-				},
-				[4] = {
-					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = frame->scene_set,
-					.dstBinding = 1,
-					.dstArrayElement = 3,
-					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1,
-					.pImageInfo = &img_info4,
-				},
+			{
+				frame->scene_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_SceneData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				VkBufferDeviceAddressInfo device_info = {
+					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+					.buffer = frame->scene_buffer.buffer,
+				};
 				
-			};
+				frame->scene_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+				
+			}
+			{
+				frame->rect3_inst_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_Rect3InstanceData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				VkBufferDeviceAddressInfo device_info = {
+					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+					.buffer = frame->rect3_inst_buffer.buffer,
+				};
+				
+				frame->rect3_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+			}
 			
-			vkUpdateDescriptorSets(r_vulkan_state->device, 5, writes, 0, 0);
+			VkDescriptorImageInfo img_info[4] = {0}; 
+			
+			for(s32 i = 0; i < 4; i++)
+			{
+				img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				img_info[i].imageView = r_vulkan_state->textures[i].view;
+				img_info[i].sampler = r_vulkan_state->textures[i].sampler;
+			}
+			
+			VkWriteDescriptorSet writes[4] = {0};
+			
+			for(s32 i = 0; i < 4; i++)
+			{
+				VkWriteDescriptorSet *write = writes + i;
+				write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write->dstSet = frame->scene_set;
+				write->dstBinding = 0;
+				write->dstArrayElement = i;
+				write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				write->descriptorCount = 1;
+				write->pImageInfo = &img_info[i];
+			}
+			
+			vkUpdateDescriptorSets(r_vulkan_state->device, 4, writes, 0, 0);
 		}
-		
-		// texture descriptors
-		
 	}
-	//arena_temp_end(&scratch);
 }
 
 function void r_vulkan_beginRendering()
@@ -1795,7 +2378,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 		vkCmdPipelineBarrier2KHR(frame->cmd_buffer, &dep_info);
 	}
 	
-	// draw hello triangle
+	// draw rect3
 	
 	VkRenderingAttachmentInfo color_attachment = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -1833,19 +2416,11 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 	};
 	
 	vkCmdBeginRenderingKHR(frame->cmd_buffer, &rendering_info);
+	vkCmdBindDescriptorSets(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->pipeline_layout, 0, 1, &frame->scene_set, 0, 0);
 	
-	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->hello_triangle_pipeline);
+	
 	vkCmdSetViewport(frame->cmd_buffer, 0, 1, &r_vulkan_state->viewport);
 	vkCmdSetScissor(frame->cmd_buffer, 0, 1, &r_vulkan_state->scissor);
-	
-	vkCmdBindDescriptorSets(frame->cmd_buffer,
-																									VK_PIPELINE_BIND_POINT_GRAPHICS,
-																									r_vulkan_state->hello_triangle_pipeline_layout,
-																									0,
-																									1,
-																									&frame->scene_set,
-																									0,
-																									0);
 	
 	static f32 counter = 0;
 	counter += delta;
@@ -1859,7 +2434,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 	
 	//M4F view = m4f_lookAt((V3F){.z = -3}, (V3F){.z = 0}, (V3F){.y = 1});
 	
-	R_VULKAN_SceneData data = {
+	R_VULKAN_SceneData scene_data = {
 		.proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
 		.view = camGetView(&camera),
 		//.view = view,
@@ -1869,20 +2444,62 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 		//.model = m4f_translate(v3f(0, 0.2, 0))
 	};
 	
-	srand(0);
-	for(s32 i = 0; i < NUM_OBJECTS; i++)
-	{
-		M4F trans = m4f_translate(v3f(i * rand() % 16, i * rand() % 16, i * rand() % 16));
-		data.model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
-		data.tex_id[i] = i % 4;
-	}
-	
 	void* mappedData;
 	vmaMapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc, &mappedData);
-	memcpy(mappedData, &data, sizeof(R_VULKAN_SceneData));
+	memcpy(mappedData, &scene_data, sizeof(R_VULKAN_SceneData));
 	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
 	
-	vkCmdDraw(frame->cmd_buffer, 6, NUM_OBJECTS, 0, 0);
+	R_VULKAN_Rect3InstanceData rect3_inst_data = {0};
+	
+	srand(0);
+	for(s32 i = 0; i < MAX_RECT3; i++)
+	{
+		M4F trans = m4f_translate(v3f(i * rand() % 16, i * rand() % 16, i * rand() % 16));
+		rect3_inst_data.model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
+		rect3_inst_data.tex_id[i] = i % 4;
+	}
+	
+	mappedData;
+	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc, &mappedData);
+	memcpy(mappedData, &rect3_inst_data, sizeof(R_VULKAN_Rect3InstanceData));
+	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc);
+	
+	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
+	
+	R_VULKAN_Rect3PushConstants push_constants = 
+	{
+		.scene = frame->scene_buffer.address,
+		.instance = frame->rect3_inst_buffer.address,
+	};
+	
+	vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
+	
+	vkCmdDraw(frame->cmd_buffer, 6, MAX_RECT3, 0, 0);
+	
+#if 1
+	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
+	
+	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = r_vulkan_state->model.meshes + i;
+		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		
+		for(u32 j = 0; j < mesh->num_primitives; j++)
+		{
+			GLTF_Primitive *prim = mesh->primitives + j;
+			R_VULKAN_MeshPushConstants push_constants = 
+			{
+				.scene_buffer = frame->scene_buffer.address,
+				.model = m4f_mul(m4f_translate(v3f(2.8, 0, 1.2)), m4f_rotate(v3f(1, 0, 0), degToRad(90))),
+				.v_buffer = mesh->v_buffer.address,
+			};
+			
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			
+			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
+		}
+	}
+#endif
 	
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
 	

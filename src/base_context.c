@@ -113,12 +113,12 @@ typedef int32_t b32;
 #pragma warning(disable: 4244)
 
 // i dont remember
-/*
+
 #pragma warning(disable: 4576)
 #pragma warning(disable: 4456)
 #pragma warning(disable: 4305)
 #pragma warning(disable: 4018)
-*/
+
 #endif
 
 #define STB_SPRINTF_IMPLEMENTATION
@@ -130,6 +130,9 @@ typedef int32_t b32;
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb/stb_truetype.c>
+
+#define CGLTF_IMPLEMENTATION
+#include <cgltf/cgltf.c>
 
 #include <stdio.h>
 #include <math.h>

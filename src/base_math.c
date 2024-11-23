@@ -40,7 +40,7 @@ union V3F
 	{
 		f32 x;
 		f32 y;
-        f32 z;
+  f32 z;
 	};
 };
 
@@ -49,6 +49,19 @@ function V3F v3f(f32 x, f32 y, f32 z)
     V3F out = {.x = x, .y = y, .z = z};
     return out;
 }
+
+typedef union V4F V4F;
+union V4F
+{
+	f32 e[4];
+	struct
+	{
+		f32 x;
+		f32 y;
+  f32 z;
+  f32 w;
+	};
+};
 
 typedef struct RectF32 RectF32;
 struct RectF32

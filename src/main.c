@@ -3,11 +3,14 @@
 int main(int argc, char *argv[])
 {
 	os_innit();
-	
-	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
+	tcxt_init();
+ Arena *perm = arenaAlloc();
+ OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
 	
 	Arena *frame = arenaAlloc();
 	r_vulkanInnit(win);
+	
+	r_vulkan_uploadVertexIndexData();
 	
 	u64 start = os_getPerfCounter();
 	u64 freq = os_getPerfFreq();
