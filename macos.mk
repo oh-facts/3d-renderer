@@ -46,16 +46,16 @@ $(info [$(build_type)])
 
 .PHONY: all clean
 all:
+
 ifeq ($(shader),1)
-	glslc hello_triangle.vert -o hello_triangle.vert.spv
-	glslc hello_triangle.frag -o hello_triangle.frag.spv
-	@echo "[compiled shaders]"
+	$(foreach file,$(wildcard gpu/*.vert gpu/*.frag),$(shell glslc $(file) -o $(basename $(file)).spv))
+	@echo "compiled shaders"
 endif # shader
 ifeq ($(ext),1)
-	$(compiler_cpp) -std=c++17 $(build_flags) -I$(vulkan_include) -I. -c vma.cpp -o vma.o
+	$(compiler_cpp) -std=c++17 $(build_flags) -I$(vulkan_include) -I. -c src/vma_impl.cpp -o vma.o
 	@echo "compiled vma"
 endif # ext
-	$(compiler) $(flags) $(build_flags) -I. -c main.c -o main.o
+	$(compiler) $(flags) $(build_flags) -I. -c src/main.c -o main.o
 	@echo "compiled yk"
 	$(compiler_cpp) -I$(vulkan_include) main.o vma.o -o yk -Wl,-rpath,/usr/local/lib -lm -lglfw3 -framework Cocoa -framework IOKit -framework CoreFoundation -framework QuartzCore -lvulkan
 	@echo "linked yk and vma"
