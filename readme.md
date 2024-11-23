@@ -35,7 +35,7 @@ The following args are also supported:  `debug` , `release`, `clean`, `clang`, `
 ### Mac
 
 ```
-
+make -f macos.mk ext=1 shader=1
 ```
 
 ### Windows
