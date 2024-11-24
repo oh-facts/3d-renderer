@@ -116,6 +116,7 @@ struct OS_State
 	Arena *arena;
 	OS_Window win[OS_MAX_WIN];
 	s32 num;
+	Str8 app_dir;
 };
 
 global OS_State *os_state;
@@ -128,7 +129,7 @@ function void os_innit()
 	os_state = pushArray(arena, OS_State, 1);
 	os_state->arena = arena;
 	glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 }
 
 function OS_Window *os_windowFromHandle(OS_Handle handle)
@@ -138,89 +139,89 @@ function OS_Window *os_windowFromHandle(OS_Handle handle)
 
 function OS_EventList os_pollEvents(Arena *arena)
 {
-    event_arena = arena;
+	event_arena = arena;
 	event_list = (OS_EventList){0};
 	
-    glfwPollEvents();
-    
-    if(glfwWindowShouldClose(os_state->win[0].v))
-    {
-        OS_Event *event = os_pushEvent(event_arena, &event_list);
-        event->key = OS_Key_NULL;
-        event->kind = OS_EventKind_CloseRequested;
-    }
-    
-    return event_list;
+	glfwPollEvents();
+	
+	if(glfwWindowShouldClose(os_state->win[0].v))
+	{
+		OS_Event *event = os_pushEvent(event_arena, &event_list);
+		event->key = OS_Key_NULL;
+		event->kind = OS_EventKind_CloseRequested;
+	}
+	
+	return event_list;
 }
 
 function void os_glfw_keyCallback(GLFWwindow* window, int _key, int scancode, int action, int mods)
 {
-    s32 key = os_keyFromSym(_key);
-    
-    if(action == GLFW_PRESS)
-    {
-        OS_Event *os_event = os_pushEvent(event_arena, &event_list);
-        
-        os_event->key = key;
-        os_event->kind = OS_EventKind_Pressed;
-    }
-    else if(action == GLFW_RELEASE)
-    {
-        OS_Event *os_event = os_pushEvent(event_arena, &event_list);
-        
-        os_event->key = key;
-        os_event->kind = OS_EventKind_Released;
-    }
+	s32 key = os_keyFromSym(_key);
+	
+	if(action == GLFW_PRESS)
+	{
+		OS_Event *os_event = os_pushEvent(event_arena, &event_list);
+		
+		os_event->key = key;
+		os_event->kind = OS_EventKind_Pressed;
+	}
+	else if(action == GLFW_RELEASE)
+	{
+		OS_Event *os_event = os_pushEvent(event_arena, &event_list);
+		
+		os_event->key = key;
+		os_event->kind = OS_EventKind_Released;
+	}
 }
 
 function void os_glfw_mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    s32 key = os_keyFromMouseButton(button);
-    
-    if(action == GLFW_PRESS)
-    {
-        OS_Event *os_event = os_pushEvent(event_arena, &event_list);
-        
-        os_event->key = key;
-        os_event->kind = OS_EventKind_Pressed;
-    }
-    else if(action == GLFW_RELEASE)
-    {
-        OS_Event *os_event = os_pushEvent(event_arena, &event_list);
-        
-        os_event->key = key;
-        os_event->kind = OS_EventKind_Released;
-    }
+	s32 key = os_keyFromMouseButton(button);
+	
+	if(action == GLFW_PRESS)
+	{
+		OS_Event *os_event = os_pushEvent(event_arena, &event_list);
+		
+		os_event->key = key;
+		os_event->kind = OS_EventKind_Pressed;
+	}
+	else if(action == GLFW_RELEASE)
+	{
+		OS_Event *os_event = os_pushEvent(event_arena, &event_list);
+		
+		os_event->key = key;
+		os_event->kind = OS_EventKind_Released;
+	}
 }
 
 function void os_glfw_mousePositonCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    OS_Event *os_event = os_pushEvent(event_arena, &event_list);
-    os_event->kind = OS_EventKind_MouseMove;
-    os_event->mpos.x = xpos;
-    os_event->mpos.y = ypos;
+	OS_Event *os_event = os_pushEvent(event_arena, &event_list);
+	os_event->kind = OS_EventKind_MouseMove;
+	os_event->mpos.x = xpos;
+	os_event->mpos.y = ypos;
 }
 
 function void os_glfw_windowSizeCallback(GLFWwindow* window, int width, int height)
 {
-    os_state->win[0].size.x = width;
-    os_state->win[0].size.y = height;
+	os_state->win[0].size.x = width;
+	os_state->win[0].size.y = height;
 }
 
 function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h)
 {
 	OS_Window *win = os_state->win + os_state->num++;
 	
-    win->v = glfwCreateWindow(w, h, title, 0, 0);
-    glfwSetWindowPos(win->v, x, y);
-    
-    glfwGetWindowSize(win->v, &win->size.x, &win->size.y);
-    
+	win->v = glfwCreateWindow(w, h, title, 0, 0);
+	glfwSetWindowPos(win->v, x, y);
+	
+	glfwGetWindowSize(win->v, &win->size.x, &win->size.y);
+	
 	glfwSetCursorPosCallback(win->v, os_glfw_mousePositonCallback);
-    glfwSetKeyCallback(win->v, os_glfw_keyCallback);
-    glfwSetMouseButtonCallback(win->v, os_glfw_mouseButtonCallback);
-    glfwSetWindowSizeCallback(win->v, os_glfw_windowSizeCallback);
-    
+	glfwSetKeyCallback(win->v, os_glfw_keyCallback);
+	glfwSetMouseButtonCallback(win->v, os_glfw_mouseButtonCallback);
+	glfwSetWindowSizeCallback(win->v, os_glfw_windowSizeCallback);
+	
 	OS_Handle out = {0};
 	out.u64[0] = win;
 	return out;
@@ -228,24 +229,24 @@ function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h)
 
 function void os_setCursorMode(OS_CursorMode mode)
 {
-    if(mode == OS_CursorMode_Disabled)
-    {
-        glfwSetInputMode(os_state->win[0].v, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    }
-    else if(mode == OS_CursorMode_Normal)
-    {
-        glfwSetInputMode(os_state->win[0].v, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }
-    
+	if(mode == OS_CursorMode_Disabled)
+	{
+		glfwSetInputMode(os_state->win[0].v, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
+	else if(mode == OS_CursorMode_Normal)
+	{
+		glfwSetInputMode(os_state->win[0].v, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+	
 }
 
 function V2F os_getCursorPos()
 {
-    double x, y;
-    glfwGetCursorPos(os_state->win[0].v, &x, &y);
-    
-    V2F out = {x, y};
-    return out;
+	double x, y;
+	glfwGetCursorPos(os_state->win[0].v, &x, &y);
+	
+	V2F out = {x, y};
+	return out;
 }
 
 function V2S os_getWindowSize(OS_Handle handle)
@@ -255,18 +256,18 @@ function V2S os_getWindowSize(OS_Handle handle)
 
 function s32 os_vulkan_getPlatformExtentions(char *extentions[])
 {
-    uint32_t count;
-    char** extensions = glfwGetRequiredInstanceExtensions(&count);
-    
-    if(extentions)
-    {
-        for(u32 i = 0; i < count; i++)
-        {
-            extentions[i] = extensions[i];
-        }
-    }
-    
-    return count;
+	uint32_t count;
+	char** extensions = glfwGetRequiredInstanceExtensions(&count);
+	
+	if(extentions)
+	{
+		for(u32 i = 0; i < count; i++)
+		{
+			extentions[i] = extensions[i];
+		}
+	}
+	
+	return count;
 }
 
 function VkResult os_vulkan_createSurface(OS_Handle handle, VkInstance instance, VkSurfaceKHR *surface)

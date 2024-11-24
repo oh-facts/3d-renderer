@@ -44,20 +44,26 @@ function void os_sleep(s32 ms)
 
 function Str8 os_getAppDir(Arena *arena)
 {
-	char buffer[256];
-	DWORD len = GetModuleFileName(0, buffer, 256);
-	
-	char *c = &buffer[len];
-	while(*(--c) != '\\')
+	local_persist Str8 out = {0};
+	local_persist b32 initialized = 0;
+	if(!initialized)
 	{
-		*c = 0;
-		--len;
+		initialized = 1;
+		char buffer[256];
+		DWORD len = GetModuleFileName(0, buffer, 256);
+		
+		char *c = &buffer[len];
+		while(*(--c) != '\\')
+		{
+			*c = 0;
+			--len;
+		}
+		
+		u8 *str = pushArray(arena, u8, len);
+		memcpy(str, buffer, len);
+		
+		out = str8(str, len);
 	}
-	
-	u8 *str = pushArray(arena, u8, len);
-	memcpy(str, buffer, len);
-	
-	Str8 out = str8(str, len);
 	
 	return out;
 }

@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
 	Arena *perm = arenaAlloc();
 	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
 	
-	Arena *frame = arenaAlloc();
+	Arena *frame = arenaAllocSized(MB(32), GB(1));
 	{
 		ArenaTemp temp = arenaTempBegin(frame);
 		
@@ -16,7 +16,6 @@ int main(int argc, char *argv[])
 		r_vulkan_uploadVertexIndexData(frame);
 		arenaTempEnd(&temp);
 	}
-	printf("%llu %llu\n", total_cmt, total_res);
 	
 	u64 start = os_getPerfCounter();
 	u64 freq = os_getPerfFreq();
