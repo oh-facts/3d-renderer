@@ -301,13 +301,13 @@ function M4F m4f_mul(M4F a, M4F b)
 
 	for(int j = 0; j < 4; j += 1)
 	{
-					for(int i = 0; i < 4; i += 1)
-					{
-						out.v[i][j] = (a.v[0][j]*b.v[i][0] +
-						a.v[1][j]*b.v[i][1] +
-						a.v[2][j]*b.v[i][2] +
-						a.v[3][j]*b.v[i][3]);
-					}
+		for(int i = 0; i < 4; i += 1)
+		{
+			out.v[i][j] = (a.v[0][j]*b.v[i][0] +
+			a.v[1][j]*b.v[i][1] +
+			a.v[2][j]*b.v[i][2] +
+			a.v[3][j]*b.v[i][3]);
+		}
 	}
 
 return out;
