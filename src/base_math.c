@@ -129,10 +129,10 @@ struct M4F
 function M4F m4f(f32 v)
 {
 	M4F out = {
-				.v[0][0] = v,
-				.v[1][1] = v,
-				.v[2][2] = v,
-				.v[3][3] = v,
+		.v[0][0] = v,
+		.v[1][1] = v,
+		.v[2][2] = v,
+		.v[3][3] = v,
 	};
 	return out;
 }
@@ -140,10 +140,10 @@ function M4F m4f(f32 v)
 function M4F m4f_scale(f32 v)
 {
 	M4F out = {
-					.v[0][0] = v,
-					.v[1][1] = v,
-					.v[2][2] = v,
-					.v[3][3] = 1,
+		.v[0][0] = v,
+		.v[1][1] = v,
+		.v[2][2] = v,
+		.v[3][3] = 1,
 	};
 	return out;
 }
@@ -153,15 +153,15 @@ function M4F m4f_scale(f32 v)
 
 function f32 v3f_length(V3F v)
 {
-    return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+	return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
 function V3F v3f_add(V3F a, V3F b)
 {
 	V3F out = {
-					.x = a.x + b.x,
-					.y = a.y + b.y,
-					.z = a.z + b.z,
+		.x = a.x + b.x,
+		.y = a.y + b.y,
+		.z = a.z + b.z,
 	};
 
 	return out;
@@ -170,9 +170,9 @@ function V3F v3f_add(V3F a, V3F b)
 function V3F v3f_sub(V3F a, V3F b)
 {
 	V3F out = {
-					.x = a.x - b.x,
-					.y = a.y - b.y,
-					.z = a.z - b.z,
+		.x = a.x - b.x,
+		.y = a.y - b.y,
+		.z = a.z - b.z,
 	};
 
 	return out;
@@ -186,9 +186,9 @@ function V3F v3f_normalize(V3F v)
 	
 	if(len != 0)
 	{
-					out.x /= len;
-					out.y /= len;
-					out.z /= len;
+		out.x /= len;
+		out.y /= len;
+		out.z /= len;
 	}
 	return out;
 }
@@ -203,9 +203,9 @@ function f32 v3f_dot(V3F a, V3F b)
 function V3F v3f_cross(V3F a, V3F b)
 {
 	V3F out = {
-					.x = a.y * b.z - a.z * b.y,
-					.y = a.z * b.x - a.x * b.z,
-					.z = a.x * b.y - a.y * b.x,
+		.x = a.y * b.z - a.z * b.y,
+		.y = a.z * b.x - a.x * b.z,
+		.z = a.x * b.y - a.y * b.x,
 	};
 	
 	return out;
@@ -219,25 +219,25 @@ m4f_lookAt(V3F eye, V3F center, V3F up)
 	V3F u = v3f_cross(s, f);
 	
 	M4F out = {
-					.v[0][0] = s.x,
-					.v[0][1] = u.x,
-					.v[0][2] = -f.x,
-					.v[0][3] = 0.0f,
-					
-					.v[1][0] = s.y,
-					.v[1][1] = u.y,
-					.v[1][2] = -f.y,
-					.v[1][3] = 0.0f,
-					
-					.v[2][0] = s.z,
-					.v[2][1] = u.z,
-					.v[2][2] = -f.z,
-					.v[2][3] = 0.0f,
-					
-					.v[3][0] = -v3f_dot(s, eye),
-					.v[3][1] = -v3f_dot(u, eye),
-					.v[3][2] = v3f_dot(f, eye),
-					.v[3][3] = 1.0f,
+		.v[0][0] = s.x,
+		.v[0][1] = u.x,
+		.v[0][2] = -f.x,
+		.v[0][3] = 0.0f,
+		
+		.v[1][0] = s.y,
+		.v[1][1] = u.y,
+		.v[1][2] = -f.y,
+		.v[1][3] = 0.0f,
+		
+		.v[2][0] = s.z,
+		.v[2][1] = u.z,
+		.v[2][2] = -f.z,
+		.v[2][3] = 0.0f,
+		
+		.v[3][0] = -v3f_dot(s, eye),
+		.v[3][1] = -v3f_dot(u, eye),
+		.v[3][2] = v3f_dot(f, eye),
+		.v[3][3] = 1.0f,
 	};
 	
 	return out;
@@ -277,19 +277,19 @@ function M4F m4f_rotate(V3F axis, f32 rad)
 	f32 one_minus_cos = 1.f - cos_theta;
 	
 	M4F out = {
-					.v[0][0] = (axis.x * axis.x * one_minus_cos) + cos_theta,
-					.v[0][1] = (axis.x * axis.y * one_minus_cos) + (axis.z * sin_theta),
-					.v[0][2] = (axis.x * axis.z * one_minus_cos) - (axis.y * sin_theta),
-					
-					.v[1][0] = (axis.y * axis.x * one_minus_cos) - (axis.z * sin_theta),
-					.v[1][1] = (axis.y * axis.y * one_minus_cos) + cos_theta,
-					.v[1][2] = (axis.y * axis.z * one_minus_cos) + (axis.x * sin_theta),
-					
-					.v[2][0] = (axis.z * axis.x * one_minus_cos) + (axis.y * sin_theta),
-					.v[2][1] = (axis.z * axis.y * one_minus_cos) - (axis.x * sin_theta),
-					.v[2][2] = (axis.z * axis.z * one_minus_cos) + cos_theta,
-					
-					.v[3][3] = 1,
+		.v[0][0] = (axis.x * axis.x * one_minus_cos) + cos_theta,
+		.v[0][1] = (axis.x * axis.y * one_minus_cos) + (axis.z * sin_theta),
+		.v[0][2] = (axis.x * axis.z * one_minus_cos) - (axis.y * sin_theta),
+		
+		.v[1][0] = (axis.y * axis.x * one_minus_cos) - (axis.z * sin_theta),
+		.v[1][1] = (axis.y * axis.y * one_minus_cos) + cos_theta,
+		.v[1][2] = (axis.y * axis.z * one_minus_cos) + (axis.x * sin_theta),
+		
+		.v[2][0] = (axis.z * axis.x * one_minus_cos) + (axis.y * sin_theta),
+		.v[2][1] = (axis.z * axis.y * one_minus_cos) - (axis.x * sin_theta),
+		.v[2][2] = (axis.z * axis.z * one_minus_cos) + cos_theta,
+		
+		.v[3][3] = 1,
 	};
 	
 	return out;
@@ -303,12 +303,12 @@ function M4F m4f_mul(M4F a, M4F b)
 	{
 					for(int i = 0; i < 4; i += 1)
 					{
-									out.v[i][j] = (a.v[0][j]*b.v[i][0] +
-																								a.v[1][j]*b.v[i][1] +
-																								a.v[2][j]*b.v[i][2] +
-																								a.v[3][j]*b.v[i][3]);
+						out.v[i][j] = (a.v[0][j]*b.v[i][0] +
+						a.v[1][j]*b.v[i][1] +
+						a.v[2][j]*b.v[i][2] +
+						a.v[3][j]*b.v[i][3]);
 					}
 	}
-	
+
 return out;
 }
