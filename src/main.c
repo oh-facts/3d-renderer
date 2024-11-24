@@ -4,8 +4,8 @@ int main(int argc, char *argv[])
 {
 	os_innit();
 	tcxt_init();
- Arena *perm = arenaAlloc();
- OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
+	Arena *perm = arenaAlloc();
+	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
 	
 	Arena *frame = arenaAlloc();
 	r_vulkanInnit(win);

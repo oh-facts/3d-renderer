@@ -1,3 +1,8 @@
+// TODO(mizu): Stop hardcoding gltf
+// manage memory. start with vulkan memory, then do
+// gltf memory
+// 
+
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
 #define R_VULKAN_FRAMES 3
@@ -197,42 +202,42 @@ struct R_VULKAN_Buffer
 typedef struct GLTF_Vertex GLTF_Vertex;
 struct GLTF_Vertex
 {
- V3F pos;
- f32 uv_x;
- V3F normal;
- f32 uv_y;
- V4F color;
+	V3F pos;
+	f32 uv_x;
+	V3F normal;
+	f32 uv_y;
+	V4F color;
 };
 
 typedef struct GLTF_Primitive GLTF_Primitive;
 struct GLTF_Primitive
 {
- u32 start;
- u32 count;
-	
+	u32 start;
+	u32 count;
+
 	u32 base_tex_id;
- Str8 base_tex;
+	Str8 base_tex;
 };
 
 typedef struct R_Handle R_Handle;
 struct R_Handle
 {
- u64 u64[2];
+	u64 u64[2];
 };
 
 typedef struct GLTF_Mesh GLTF_Mesh;
 struct GLTF_Mesh
 {
- GLTF_Primitive *primitives;
- u64 num_primitives;
-	
+	GLTF_Primitive *primitives;
+	u64 num_primitives;
+
 	R_VULKAN_Buffer i_buffer;
- u32 *indices;
- u32 num_indices;
-	
+	u32 *indices;
+	u32 num_indices;
+
 	R_VULKAN_Buffer v_buffer;
- GLTF_Vertex *vertices;
- u32 num_vertices;
+	GLTF_Vertex *vertices;
+	u32 num_vertices;
 };
 
 typedef struct GLTF_Model GLTF_Model;
@@ -240,10 +245,10 @@ struct GLTF_Model
 {
 	R_VULKAN_Image *images;
 	Bitmap *textures;
- u32 num_textures;
-	
- GLTF_Mesh *meshes;
- u64 num_meshes;
+	u32 num_textures;
+
+	GLTF_Mesh *meshes;
+	u64 num_meshes;
 };
 
 typedef struct GLTF_It GLTF_It;
@@ -530,11 +535,13 @@ struct R_VULKAN_FrameData
 typedef struct R_VULKAN_State R_VULKAN_State;
 struct R_VULKAN_State
 {
-	GLTF_Model model;
+	Arena *arena;
+	
 	OS_Handle vkdll;
+	
+	GLTF_Model model;
 	V2S last_frame_window_size;
 	
-	Arena *arena;
 	VkInstance instance;
 	
 	VkPhysicalDevice phys_device;
@@ -958,12 +965,9 @@ function void r_vulkan_uploadVertexIndexData()
 		
 		mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 		
-		mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-																																									VMA_MEMORY_USAGE_GPU_ONLY);
+		mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 		
-		R_VULKAN_Buffer staging =
-			r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-																									VMA_MEMORY_USAGE_CPU_TO_GPU);
+		R_VULKAN_Buffer staging = r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		
 		void *data = 0;
 		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
@@ -1335,11 +1339,7 @@ function void r_vulkanInnit(OS_Handle win)
 		
 		vkEnumerateInstanceVersion(&version);
 		
-		printf("\nInstance Version: %d.%d.%d\n\n"
-									,VK_VERSION_MAJOR(version)
-									,VK_VERSION_MINOR(version)
-									,VK_VERSION_PATCH(version)
-									);
+		printf("\nInstance Version: %d.%d.%d\n\n" ,VK_VERSION_MAJOR(version) ,VK_VERSION_MINOR(version) ,VK_VERSION_PATCH(version));
 		
 		char *validation_layers[1] = {0};
 		u32 validation_layers_num = 0;
@@ -1692,6 +1692,54 @@ function void r_vulkanInnit(OS_Handle win)
 	
 	r_vulkan_createSwapchain(win);
 	
+	// pipeline layout and descriptor set layout
+	{
+		// descriptor set layout
+		
+		VkDescriptorSetLayoutBinding descriptor_bindings[1] = {
+			[0] = {
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 10,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+				.pImmutableSamplers = 0,
+			},
+			
+		};
+		
+		VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = 0,
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+			.bindingCount = arrayLen(descriptor_bindings),
+			.pBindings = descriptor_bindings,
+		};
+		
+		res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
+																																				&descriptor_layout_info,
+																																				0,
+																																				&r_vulkan_state->descriptor_set_layout);
+		r_vulkanAssert(res);
+		
+		VkPushConstantRange range = {
+			.offset = 0,
+			//.size = sizeof(R_VULKAN_Rect3PushConstants),
+			.size = 256,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		};
+		
+		// pipeline layout
+		VkPipelineLayoutCreateInfo layout_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &r_vulkan_state->descriptor_set_layout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &range,
+		};
+		
+		vkCreatePipelineLayout(r_vulkan_state->device, &layout_info, 0, &r_vulkan_state->pipeline_layout);
+	}
+	
 	// rect3 pipeline 
 	{
 		// pipeline shader stage
@@ -1843,51 +1891,6 @@ function void r_vulkanInnit(OS_Handle win)
 			.pDynamicStates = dynamic_states,
 		};
 		
-		// descriptor set layout
-		
-		VkDescriptorSetLayoutBinding descriptor_bindings[1] = {
-			[0] = {
-				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 10,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-				.pImmutableSamplers = 0,
-			},
-			
-		};
-		
-		VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.pNext = 0,
-			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-			.bindingCount = arrayLen(descriptor_bindings),
-			.pBindings = descriptor_bindings,
-		};
-		
-		res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
-																																				&descriptor_layout_info,
-																																				0,
-																																				&r_vulkan_state->descriptor_set_layout);
-		r_vulkanAssert(res);
-		
-		VkPushConstantRange range = {
-			.offset = 0,
-			//.size = sizeof(R_VULKAN_Rect3PushConstants),
-			.size = 256,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		};
-		
-		// pipeline layout
-		VkPipelineLayoutCreateInfo layout_info = {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = 1,
-			.pSetLayouts = &r_vulkan_state->descriptor_set_layout,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = &range,
-		};
-		
-		vkCreatePipelineLayout(r_vulkan_state->device, &layout_info, 0, &r_vulkan_state->pipeline_layout);
-		
 		// pipeline
 		
 		VkPipelineRenderingCreateInfo render_info = {
@@ -2008,9 +2011,9 @@ function void r_vulkanInnit(OS_Handle win)
 			.depthClampEnable = VK_FALSE,
 			.rasterizerDiscardEnable = VK_FALSE,
 			.polygonMode = VK_POLYGON_MODE_FILL,
-			.cullMode = VK_CULL_MODE_NONE,
-			//.cullMode = VK_CULL_MODE_BACK_BIT,
-			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+			//.cullMode = VK_CULL_MODE_NONE,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 			.depthBiasEnable = VK_FALSE,
 			.depthBiasConstantFactor = 0,
 			.depthBiasClamp = 0,
@@ -2195,15 +2198,15 @@ function void r_vulkanInnit(OS_Handle win)
 	// resources
 	{
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/ell"));
+			Bitmap bmp = bitmap(str8_lit("scratch/ell.png"));
 			r_vulkan_state->textures[0] = r_vulkan_image(bmp);
 		}
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/marhall"));
+			Bitmap bmp = bitmap(str8_lit("scratch/marhall.png"));
 			r_vulkan_state->textures[1] = r_vulkan_image(bmp);
 		}
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/maruko"));
+			Bitmap bmp = bitmap(str8_lit("scratch/maruko.png"));
 			r_vulkan_state->textures[2] = r_vulkan_image(bmp);
 		}
 		{

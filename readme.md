@@ -1,6 +1,6 @@
 <p>
 <h1 align="center">Ladybird</h2>
-<p align="center">3D Renderer - C - Vulkan</p>
+<p align="center">3D Vulkan Renderer</p>
 <p align="center">
 <img width="400"src="res/ladybird/ladybird.png">
 </p>
@@ -8,19 +8,23 @@
 
 ## Compile
 
+Vulkan 1.2 is used. Dynamic rendering, BDA, Sync 2 and Descriptor indexing is also used. I have been used.
+
 The main branch will always compile on windows, linux and mac. 
 
 `Dev` might not compile on windows / mac since I use Arch btw. However, every now and then, I boot up windows to make it compile.
 
-Mac build and vulkan support has been authored by @gruelingpine185
+`hot` might only compile on my machine. Sometimes it doesn't, but I still push it. Git is "free" cloud storage
 
-Vulkan 1.2 is used. Dynamic rendering, BDA, Sync 2 and Descriptor indexing is also used. I have been used.
+Mac build and vulkan support has been authored by @gruelingpine185
 
 #### Dependencies
 
-- vulkan sdk (vk headers + lib + vma headers + glslc)
+- vulkan sdk (vk headers and lib + vma headers + glslc)
 
-- glfw
+- glfw (For win32, binaries and headers are shipped with the repo)
+
+- C99 and C++17 compiler
 
 ### Linux
 

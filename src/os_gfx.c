@@ -226,7 +226,7 @@ read_only char *event_names[] =
 	[OS_EventKind_Pressed] = "pressed",
 	[OS_EventKind_Released] = "released",
 	[OS_EventKind_CloseRequested] = "close requested",
-    [OS_EventKind_MouseMove] = "mouse moved",
+	[OS_EventKind_MouseMove] = "mouse moved",
 };
 
 function void os_eventListPrint(OS_EventList *list)
