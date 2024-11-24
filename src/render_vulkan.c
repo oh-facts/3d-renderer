@@ -199,55 +199,83 @@ struct R_VULKAN_Buffer
 	VmaAllocationInfo info;
 };
 
+typedef struct R_Handle R_Handle;
+struct R_Handle
+{
+ u64 u64[2];
+};
+
 typedef struct GLTF_Vertex GLTF_Vertex;
 struct GLTF_Vertex
 {
-	V3F pos;
-	f32 uv_x;
-	V3F normal;
-	f32 uv_y;
-	V4F color;
+ V3F pos;
+ f32 uv_x;
+ V3F normal;
+ f32 uv_y;
+ V4F color;
 };
 
 typedef struct GLTF_Primitive GLTF_Primitive;
 struct GLTF_Primitive
 {
-	u32 start;
-	u32 count;
-
-	u32 base_tex_id;
-	Str8 base_tex;
-};
-
-typedef struct R_Handle R_Handle;
-struct R_Handle
-{
-	u64 u64[2];
+ u32 start;
+ u32 count;
+	
+ Str8 base_tex;
 };
 
 typedef struct GLTF_Mesh GLTF_Mesh;
 struct GLTF_Mesh
 {
-	GLTF_Primitive *primitives;
-	u64 num_primitives;
-
-	R_VULKAN_Buffer i_buffer;
-	u32 *indices;
-	u32 num_indices;
-
-	R_VULKAN_Buffer v_buffer;
-	GLTF_Vertex *vertices;
-	u32 num_vertices;
+ GLTF_Primitive *primitives;
+ u64 num_primitives;
+	
+ u32 *indices;
+ u32 num_indices;
+	
+ GLTF_Vertex *vertices;
+ u32 num_vertices;
 };
 
 typedef struct GLTF_Model GLTF_Model;
 struct GLTF_Model
 {
-	R_VULKAN_Image *images;
 	Bitmap *textures;
-	u32 num_textures;
+ u32 num_textures;
+	
+ GLTF_Mesh *meshes;
+ u64 num_meshes;
+};
 
-	GLTF_Mesh *meshes;
+// TODO(mizu): textures go inside engine. an id is held for it
+// other fields 
+
+typedef struct R_VULKAN_Primitive R_VULKAN_Primitive;
+struct R_VULKAN_Primitive
+{
+ u32 start;
+ u32 count;
+	
+	u32 base_tex_id;
+};
+
+typedef struct R_VULKAN_Mesh R_VULKAN_Mesh;
+struct R_VULKAN_Mesh
+{
+	R_VULKAN_Primitive *primitives;
+ u64 num_primitives;
+	
+	R_VULKAN_Buffer i_buffer;
+ u32 num_indices;
+	
+	R_VULKAN_Buffer v_buffer;
+ u32 num_vertices;
+};
+
+typedef struct R_VULKAN_Model R_VULKAN_Model;
+struct R_VULKAN_Model 
+{
+	R_VULKAN_Mesh *meshes;
 	u64 num_meshes;
 };
 
@@ -448,20 +476,13 @@ function void gltf_print(GLTF_Model *model)
 	}
 }
 
-function GLTF_Model gltf_load_mesh(Arena *arena, Str8 filepath)
+function GLTF_Model gltf_load_mesh(Arena *arena, Arena *scratch, Str8 filepath)
 {
 	GLTF_Model out = {0};
-	ArenaTemp temp = scratch_begin(0, 0);
 	
 	GLTF_It it = {0};
 	
 	it.abs_path = str8_lit("C:\\dev\\3d-renderer\\res\\asuka\\scene.gltf");
-	
-	//  it.abs_path = str8_join(temp.arena, a_state->asset_dir, filepath);
-	pushArray(temp.arena, u8, 1);
-	
-	//it.dir = str8_join(temp.arena, it.abs_path, str8_lit("/../"));
-	
 	
 	cgltf_options options = {0};
 	cgltf_data *data = 0;
@@ -511,8 +532,7 @@ function GLTF_Model gltf_load_mesh(Arena *arena, Str8 filepath)
 		}
 	}
 	
-	//scratch_end(&temp);
-	
+	cgltf_free(data);
 	
 	return out;
 }
@@ -536,29 +556,28 @@ typedef struct R_VULKAN_State R_VULKAN_State;
 struct R_VULKAN_State
 {
 	Arena *arena;
+	VmaAllocator vma;
 	
 	OS_Handle vkdll;
 	
-	GLTF_Model model;
-	V2S last_frame_window_size;
-	
+	// vulkan data
 	VkInstance instance;
-	
 	VkPhysicalDevice phys_device;
 	VkDevice device;
 	u32 q_main_family;
 	VkQueue q_main;
+	
+	V2S last_frame_window_size;
 	VkSurfaceKHR surface;
 	VkSurfaceFormatKHR surface_format;
 	VkExtent2D surface_extent;
 	VkSwapchainKHR swapchain;
 	
-	VmaAllocator vma;
-	
 	VkImage *swapchain_images;
 	VkImageView *swapchain_image_views;
 	u32 swapchain_image_count;
 	
+	// render target
 	VkViewport viewport;
 	VkRect2D scissor;
 	
@@ -574,13 +593,16 @@ struct R_VULKAN_State
 	VkExtent2D depth_image_extent;
 	VmaAllocation depth_image_memory;
 	
+	// layouts
 	VkPipelineLayout pipeline_layout;
 	VkDescriptorPool descriptor_pool;
 	VkDescriptorSetLayout descriptor_set_layout;
 	
+	// pipelines
 	VkPipeline rect3_pipeline;
 	VkPipeline mesh_pipeline;
 	
+	// frame render data
 	R_VULKAN_FrameData frames[R_VULKAN_FRAMES];
 	u32 current_frame_index;
 	
@@ -588,7 +610,10 @@ struct R_VULKAN_State
 	VkCommandBuffer im_cmd_buffer;
 	VkFence im_fence;
 	
-	R_VULKAN_Image textures[4];
+	// resources
+	R_VULKAN_Model model;
+	R_VULKAN_Image *textures;
+	u32 num_textures;
 };
 
 global R_VULKAN_State *r_vulkan_state;
@@ -911,30 +936,28 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 	return out;
 }
 
-function void r_vulkan_uploadVertexIndexData()
+function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 {
-	r_vulkan_state->model = gltf_load_mesh(r_vulkan_state->arena, str8_lit(""));
+	GLTF_Model model = gltf_load_mesh(scratch, scratch, str8_lit(""));
+	
+	r_vulkan_state->model.num_meshes = model.num_meshes;
+	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
 	
 	VkDescriptorImageInfo img_info[3] = {0}; 
-	
-	r_vulkan_state->model.images = pushArray(r_vulkan_state->arena, R_VULKAN_Image, r_vulkan_state->model.num_textures);
-	
-	for(u32 i = 0; i < r_vulkan_state->model.num_textures; i++)
-	{
-		R_VULKAN_Image *image = r_vulkan_state->model.images + i;
-		*image = r_vulkan_image(r_vulkan_state->model.textures[i]);
-		img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		img_info[i].imageView = image->view;
-		img_info[i].sampler = image->sampler;
-	}
 	
 	for(u32 j = 0; j < R_VULKAN_FRAMES; j++)
 	{
 		R_VULKAN_FrameData *frame = r_vulkan_state->frames + j;
 		VkWriteDescriptorSet writes[1] = {0};
-		for(u32 i = 0; i < 1; i++)
+		for(u32 i = 0; i < model.num_textures; i++)
 		{
-			R_VULKAN_Image *image = r_vulkan_state->model.images;
+			R_VULKAN_Image *image = r_vulkan_state->textures + r_vulkan_state->num_textures++;
+			
+			*image = r_vulkan_image(model.textures[i]);
+			img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			img_info[i].imageView = image->view;
+			img_info[i].sampler = image->sampler;
+			
 			VkWriteDescriptorSet *write = writes;
 			write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			write->dstSet = frame->scene_set;
@@ -947,27 +970,46 @@ function void r_vulkan_uploadVertexIndexData()
 		vkUpdateDescriptorSets(r_vulkan_state->device, 1, writes, 0, 0);
 	}
 	
-	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
+	r_vulkan_state->model.num_meshes = model.num_meshes;
+	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
+	
+	for(u32 i = 0; i < model.num_meshes; i++)
 	{
-		GLTF_Mesh *mesh = r_vulkan_state->model.meshes + i;
+		r_vulkan_state->model.meshes[i].num_primitives = model.meshes[i].num_primitives;
+		r_vulkan_state->model.meshes[i].primitives = pushArray(r_vulkan_state->arena, R_VULKAN_Primitive, r_vulkan_state->model.meshes[i].num_primitives);
+		
+		for(u32 j = 0; j < r_vulkan_state->model.meshes[i].num_primitives; j++)
+		{
+			r_vulkan_state->model.meshes[i].primitives[j].start = model.meshes[i].primitives[j].start;
+			r_vulkan_state->model.meshes[i].primitives[j].count = model.meshes[i].primitives[j].count;
+		}
+	}
+	
+	for(u32 i = 0; i < model.num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = model.meshes + i;
+		R_VULKAN_Mesh *vk_mesh = r_vulkan_state->model.meshes + i;
 		
 		u64 vertices_size = sizeof(GLTF_Vertex) * mesh->num_vertices;
 		u64 indices_size = sizeof(u32) * mesh->num_indices;
 		
-		mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-																																									VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-																																									VMA_MEMORY_USAGE_GPU_ONLY);
+		vk_mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+																																												VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+																																												VMA_MEMORY_USAGE_GPU_ONLY);
 		
 		VkBufferDeviceAddressInfo device_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = mesh->v_buffer.buffer,
+			.buffer = vk_mesh->v_buffer.buffer,
 		};
 		
-		mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+		vk_mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 		
-		mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+		vk_mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+																																												VMA_MEMORY_USAGE_GPU_ONLY);
 		
-		R_VULKAN_Buffer staging = r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		R_VULKAN_Buffer staging =
+			r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+																									VMA_MEMORY_USAGE_CPU_TO_GPU);
 		
 		void *data = 0;
 		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
@@ -983,14 +1025,14 @@ function void r_vulkan_uploadVertexIndexData()
 			.size = vertices_size,
 		};
 		
-		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, mesh->v_buffer.buffer, 1, &vert_copy);
+		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, vk_mesh->v_buffer.buffer, 1, &vert_copy);
 		
 		VkBufferCopy index_copy = {
 			.srcOffset = vertices_size,
 			.size = indices_size,
 		};
 		
-		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, mesh->i_buffer.buffer, 1, &index_copy);
+		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, vk_mesh->i_buffer.buffer, 1, &index_copy);
 		
 		r_vulkan_imEndSubmit();
 	}
@@ -1036,7 +1078,7 @@ function void r_vulkan_cleanupSwapchain()
 	//vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
 }
 
-function VkResult r_vulkan_createSwapchain(OS_Handle win)
+function VkResult r_vulkan_createSwapchain(OS_Handle win, Arena *scratch)
 {
 	// swapchain
 	VkSurfaceCapabilitiesKHR surface_cap = {0};
@@ -1056,7 +1098,7 @@ function VkResult r_vulkan_createSwapchain(OS_Handle win)
 	res = vkGetPhysicalDeviceSurfaceFormatsKHR(r_vulkan_state->phys_device, r_vulkan_state->surface, &format_count, 0);
 	r_vulkanAssert(res);
 	
-	VkSurfaceFormatKHR *surface_format_list = pushArray(r_vulkan_state->arena, VkSurfaceFormatKHR, format_count);
+	VkSurfaceFormatKHR *surface_format_list = pushArray(scratch, VkSurfaceFormatKHR, format_count);
 	vkGetPhysicalDeviceSurfaceFormatsKHR(r_vulkan_state->phys_device, r_vulkan_state->surface, &format_count, surface_format_list);
 	
 	// get format
@@ -1099,13 +1141,18 @@ function VkResult r_vulkan_createSwapchain(OS_Handle win)
 	
 	// allocate swapchain images & views
 	{
-		u32 image_count = 0;
-		vkGetSwapchainImagesKHR(r_vulkan_state->device, r_vulkan_state->swapchain, &image_count, 0);
-		
-		r_vulkan_state->swapchain_images = pushArray(r_vulkan_state->arena, VkImage, image_count);
-		r_vulkan_state->swapchain_image_views = pushArray(r_vulkan_state->arena, VkImageView, image_count);
-		
-		r_vulkan_state->swapchain_image_count = image_count;
+		local_persist b32 initialized = 0;
+		if(!initialized)
+		{
+			initialized = 1;
+			u32 image_count = 0;
+			vkGetSwapchainImagesKHR(r_vulkan_state->device, r_vulkan_state->swapchain, &image_count, 0);
+			
+			r_vulkan_state->swapchain_images = pushArray(r_vulkan_state->arena, VkImage, image_count);
+			r_vulkan_state->swapchain_image_views = pushArray(r_vulkan_state->arena, VkImageView, image_count);
+			
+			r_vulkan_state->swapchain_image_count = image_count;
+		}
 	}
 	
 	res = vkGetSwapchainImagesKHR(r_vulkan_state->device, r_vulkan_state->swapchain, &r_vulkan_state->swapchain_image_count, r_vulkan_state->swapchain_images);
@@ -1275,12 +1322,12 @@ function VkResult r_vulkan_createSwapchain(OS_Handle win)
 	return res;
 }
 
-function VkResult r_vulkan_recreateSwapchain(OS_Handle win)
+function VkResult r_vulkan_recreateSwapchain(OS_Handle win, Arena *scratch)
 {
 	//printf("recreated swapchain\n");
 	vkDeviceWaitIdle(r_vulkan_state->device);
 	r_vulkan_cleanupSwapchain();
-	r_vulkan_createSwapchain(win);
+	r_vulkan_createSwapchain(win, scratch);
 	
 	return 0;
 }
@@ -1316,7 +1363,7 @@ void ubo_update(VmaAllocator allocator, YkBuffer* buffer, void* ubo, size_t size
 }
 */
 
-function void r_vulkanInnit(OS_Handle win)
+function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 {
 	Arena *arena = arenaAlloc();
 	r_vulkan_state = pushArray(arena, R_VULKAN_State, 1);
@@ -1339,13 +1386,17 @@ function void r_vulkanInnit(OS_Handle win)
 		
 		vkEnumerateInstanceVersion(&version);
 		
-		printf("\nInstance Version: %d.%d.%d\n\n" ,VK_VERSION_MAJOR(version) ,VK_VERSION_MINOR(version) ,VK_VERSION_PATCH(version));
+		printf("\nInstance Version: %d.%d.%d\n\n"
+									,VK_VERSION_MAJOR(version)
+									,VK_VERSION_MINOR(version)
+									,VK_VERSION_PATCH(version)
+									);
 		
 		char *validation_layers[1] = {0};
 		u32 validation_layers_num = 0;
 		
 		R_VULKAN_ExtentionList extentions = {
-			.v = pushArray(arena, char*, 10),
+			.v = pushArray(scratch, char*, 10),
 			.cap = 10,
 		};
 		
@@ -1429,8 +1480,8 @@ function void r_vulkanInnit(OS_Handle win)
 		res = vkEnumeratePhysicalDevices(r_vulkan_state->instance, &count, 0);
 		r_vulkanAssert(res);
 		
-		VkPhysicalDevice *phys_devices = pushArray(arena, VkPhysicalDevice, count);
-		VkPhysicalDeviceFeatures2 *features = pushArray(arena, VkPhysicalDeviceFeatures2, count);
+		VkPhysicalDevice *phys_devices = pushArray(scratch, VkPhysicalDevice, count);
+		VkPhysicalDeviceFeatures2 *features = pushArray(scratch, VkPhysicalDeviceFeatures2, count);
 		
 		res = vkEnumeratePhysicalDevices(r_vulkan_state->instance, &count, phys_devices);
 		
@@ -1442,7 +1493,7 @@ function void r_vulkanInnit(OS_Handle win)
 			b32 good;
 		}GpuStat;
 		
-		GpuStat *gpus = pushArray(arena, GpuStat, count);
+		GpuStat *gpus = pushArray(scratch, GpuStat, count);
 		
 		for(u32 i = 0; i < count; i ++)
 		{
@@ -1690,7 +1741,7 @@ function void r_vulkanInnit(OS_Handle win)
 	
 	//vkCmdPipelineBarrier2KHR = (PFN_vkCmdPipelineBarrier2KHR)os_loadFunction(vkdll, "vkCmdPipelineBarrier2KHR");
 	
-	r_vulkan_createSwapchain(win);
+	r_vulkan_createSwapchain(win, scratch);
 	
 	// pipeline layout and descriptor set layout
 	{
@@ -1743,7 +1794,7 @@ function void r_vulkanInnit(OS_Handle win)
 	// rect3 pipeline 
 	{
 		// pipeline shader stage
-		FileData vert_src = readFile(r_vulkan_state->arena, str8_lit("rect3.vert.spv"), FILE_TYPE_BINARY);
+		FileData vert_src = readFile(scratch, str8_lit("rect3.vert.spv"), FILE_TYPE_BINARY);
 		VkShaderModuleCreateInfo vert_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = vert_src.size,
@@ -1754,7 +1805,7 @@ function void r_vulkanInnit(OS_Handle win)
 		res = vkCreateShaderModule(r_vulkan_state->device, &vert_shader_module_info, 0, &vert_module);
 		r_vulkanAssert(res);
 		
-		FileData frag_src = readFile(r_vulkan_state->arena, str8_lit("rect3.frag.spv"), FILE_TYPE_BINARY);
+		FileData frag_src = readFile(scratch, str8_lit("rect3.frag.spv"), FILE_TYPE_BINARY);
 		
 		VkShaderModuleCreateInfo frag_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1931,7 +1982,7 @@ function void r_vulkanInnit(OS_Handle win)
 	// mesh pipeline 
 	{
 		// pipeline shader stage
-		FileData vert_src = readFile(r_vulkan_state->arena, str8_lit("mesh.vert.spv"), FILE_TYPE_BINARY);
+		FileData vert_src = readFile(scratch, str8_lit("mesh.vert.spv"), FILE_TYPE_BINARY);
 		VkShaderModuleCreateInfo vert_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = vert_src.size,
@@ -1942,7 +1993,7 @@ function void r_vulkanInnit(OS_Handle win)
 		res = vkCreateShaderModule(r_vulkan_state->device, &vert_shader_module_info, 0, &vert_module);
 		r_vulkanAssert(res);
 		
-		FileData frag_src = readFile(r_vulkan_state->arena, str8_lit("mesh.frag.spv"), FILE_TYPE_BINARY);
+		FileData frag_src = readFile(scratch, str8_lit("mesh.frag.spv"), FILE_TYPE_BINARY);
 		
 		VkShaderModuleCreateInfo frag_shader_module_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -2197,6 +2248,7 @@ function void r_vulkanInnit(OS_Handle win)
 	
 	// resources
 	{
+		r_vulkan_state->textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image, 10);
 		{
 			Bitmap bmp = bitmap(str8_lit("scratch/ell.png"));
 			r_vulkan_state->textures[0] = r_vulkan_image(bmp);
@@ -2306,7 +2358,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 	r_vulkan_state->last_frame_window_size = os_getWindowSize(win);
 }
 
-function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
+function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Arena *scratch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -2320,7 +2372,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 	
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) 
 	{
-		res = r_vulkan_createSwapchain(win);
+		res = r_vulkan_createSwapchain(win, scratch);
 		r_vulkanAssert(res);
 		
 		return;
@@ -2484,12 +2536,12 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 	
 	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
 	{
-		GLTF_Mesh *mesh = r_vulkan_state->model.meshes + i;
+		R_VULKAN_Mesh *mesh = r_vulkan_state->model.meshes + i;
 		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		
 		for(u32 j = 0; j < mesh->num_primitives; j++)
 		{
-			GLTF_Primitive *prim = mesh->primitives + j;
+			R_VULKAN_Primitive *prim = mesh->primitives + j;
 			R_VULKAN_MeshPushConstants push_constants = 
 			{
 				.scene_buffer = frame->scene_buffer.address,
@@ -2736,7 +2788,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta)
 	
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR) || !v2s_equals(os_getWindowSize(win), r_vulkan_state->last_frame_window_size))
 	{
-		res = r_vulkan_recreateSwapchain(win);
+		res = r_vulkan_recreateSwapchain(win, scratch);
 		return;
 	}
 	
