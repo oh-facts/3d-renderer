@@ -6,6 +6,14 @@
 </p>
 </p>
 
+End goal is to learn more about modern gpus and gfx programming. I am exploring bindless rendering, gltf materials and global illumination. I might make a game with it for fun.
+
+## 11/24/24
+
+![](res/ladybird/demo.png)
+
+
+
 ## Compile
 
 Vulkan 1.2 is used. Dynamic rendering, BDA, Sync 2 and Descriptor indexing is also used. I have been used.
@@ -25,6 +33,16 @@ Mac build and vulkan support has been authored by @gruelingpine185
 - glfw (For win32, binaries and headers are shipped with the repo)
 
 - C99 and C++17 compiler
+
+- git-lfs (for storing resources)
+
+```
+git clone https://github.com/oh-facts/3d-renderer.git
+cd 3d-renderer
+git lfs pull
+```
+
+You will need to install `git-lfs`.
 
 ### Linux
 
