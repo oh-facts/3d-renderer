@@ -1048,25 +1048,6 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 	
 }
 
-typedef struct R_VULKAN_ExtentionList R_VULKAN_ExtentionList;
-struct R_VULKAN_ExtentionList
-{
-	char **v;
-	u32 num;
-	u32 cap;
-};
-
-function char **r_vulkan_pushExtention(R_VULKAN_ExtentionList *list, u32 num)
-{
-	char **out = list->v + list->num;
-	list->num += num;
-	if(list->num > list->cap)
-	{
-		INVALID_CODE_PATH();
-	}
-	return out;
-}
-
 // section: swapchain ===============================
 
 function void r_vulkan_cleanupSwapchain()
@@ -1401,46 +1382,34 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 									,VK_VERSION_PATCH(version)
 									);
 		
-		char *validation_layers[1] = {0};
-		u32 validation_layers_num = 0;
-		
-		R_VULKAN_ExtentionList extentions = {
-			.v = pushArray(scratch, char*, 10),
-			.cap = 10,
-		};
-		
-		{
-			u32 platform_ext_num = os_vulkan_getPlatformExtentions(0);
-			char **platform_ext = r_vulkan_pushExtention(&extentions, platform_ext_num);
-			os_vulkan_getPlatformExtentions(platform_ext);
-		}
-		{
-			char **ext = r_vulkan_pushExtention(&extentions, 1);
-			*ext = VK_KHR_SURFACE_EXTENSION_NAME;
-		}
-#if defined(OS_APPLE)
-		{
-			char **ext = r_vulkan_pushExtention(&extentions, 1);
-			*ext = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-		}
-		
-		{
-			char **ext = r_vulkan_pushExtention(&extentions, 1);
-			*ext = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
-		}
-#endif
+		char *validation_layers[] = {
 #if R_VULKAN_DEBUG
-		
-		validation_layers[validation_layers_num++] = (char*){
 			"VK_LAYER_KHRONOS_validation"
+#endif
 		};
 		
-		{
-			char **ext = r_vulkan_pushExtention(&extentions, 1);
-			*ext = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-		}
-		
+		char *user_extentions[] = {
+			VK_KHR_SURFACE_EXTENSION_NAME,
+#if R_VULKAN_DEBUG
+			VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
+#if defined(OS_APPLE)
+			VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+			VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+#endif
+		};
+		
+		u32 platform_ext_num = os_vulkan_getPlatformExtentions(0);
+		
+		char **extentions = pushArray(scratch, char *, arrayLen(user_extentions) + platform_ext_num);
+		u32 extention_num = 0;
+		
+		extention_num += os_vulkan_getPlatformExtentions(extentions);
+		
+		for(s32 i = 0; i < arrayLen(user_extentions); i++)
+		{
+			extentions[i + extention_num] = user_extentions[i];
+		}
 		
 		VkApplicationInfo app_info = {
 			.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -1463,10 +1432,10 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 #endif
 			
 			.pApplicationInfo = &app_info,
-			.enabledLayerCount = validation_layers_num,
+			.enabledLayerCount = arrayLen(validation_layers),
 			.ppEnabledLayerNames = validation_layers,
-			.enabledExtensionCount = extentions.num,
-			.ppEnabledExtensionNames = extentions.v
+			.enabledExtensionCount = extention_num,
+			.ppEnabledExtensionNames = extentions
 		};
 		
 		res = vkCreateInstance(&inst_info, 0, &r_vulkan_state->instance);
