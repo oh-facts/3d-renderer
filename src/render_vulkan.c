@@ -1402,13 +1402,15 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 		u32 platform_ext_num = os_vulkan_getPlatformExtentions(0);
 		
 		char **extentions = pushArray(scratch, char *, arrayLen(user_extentions) + platform_ext_num);
+		
 		u32 extention_num = 0;
 		
 		extention_num += os_vulkan_getPlatformExtentions(extentions);
 		
 		for(s32 i = 0; i < arrayLen(user_extentions); i++)
 		{
-			extentions[i + extention_num] = user_extentions[i];
+			extentions[i + platform_ext_num] = user_extentions[i];
+			extention_num += 1;
 		}
 		
 		VkApplicationInfo app_info = {
