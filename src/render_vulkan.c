@@ -1,7 +1,5 @@
-// TODO(mizu): Stop hardcoding gltf
-// manage memory. start with vulkan memory, then do
-// gltf memory
-// 
+// TODO(mizu): use ssbo array and pass an id through push constants
+// r_vulkan_uploadTexture
 
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
@@ -2515,19 +2513,19 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	memcpy(mappedData, &scene_data, sizeof(R_VULKAN_SceneData));
 	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
 	
-	R_VULKAN_Rect3InstanceData rect3_inst_data = {0};
+	R_VULKAN_Rect3InstanceData *rect3_inst_data = pushArray(scratch, R_VULKAN_Rect3InstanceData, 1);
 	
 	srand(0);
 	for(s32 i = 0; i < MAX_RECT3; i++)
 	{
 		M4F trans = m4f_translate(v3f(i * rand() % 16, i * rand() % 16, i * rand() % 16));
-		rect3_inst_data.model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
-		rect3_inst_data.tex_id[i] = i % 4;
+		rect3_inst_data->model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter * (rand() % 16)));
+		rect3_inst_data->tex_id[i] = i % 4;
 	}
 	
 	mappedData;
 	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc, &mappedData);
-	memcpy(mappedData, &rect3_inst_data, sizeof(R_VULKAN_Rect3InstanceData));
+	memcpy(mappedData, rect3_inst_data, sizeof(R_VULKAN_Rect3InstanceData));
 	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc);
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
