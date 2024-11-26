@@ -9,7 +9,7 @@ layout (location = 2) in vec2 a_uv;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-	vec4 textureColor = texture(tex[7], a_uv);
+	vec4 textureColor = texture(tex[4], a_uv);
 	
 	outColor = textureColor;//vec4(1);//textureColor;// * vec4(fragColor, 1);
 }

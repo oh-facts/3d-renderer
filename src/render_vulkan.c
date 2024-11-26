@@ -1,5 +1,15 @@
 // TODO(mizu): use ssbo array and pass an id through push constants
-// r_vulkan_uploadTexture
+// TODO(mizu): delete old swapchain
+
+// TODO(mizu): upload mesh, upload materials
+// TODO(mizu): texture cache, vertex / index cache
+// TODO(mizu): pipeline builder. But do it after you have more pipelines.
+
+// STUDY(mizu): How are update descriptor sets supposed to be handled. RN, after loading all textures (from meshes, debug textures, sprites, etc.), I call descriptor write once. How do engines usually handle this? What if I am unloading and loading assets on the fly. I guess I can update free slots. HMMM. Anyways, see if you can figure out how its done.
+
+// STUDY(mizu): Also, how do I want to handle resources? Should uploadxxx return a resource and then that is added to the renderer's res table, or does it directly add to the renderer's res table? The reason why I returned the resource, then added to the table was because I thought materials might want to own those resources, so I might just have arrays of materials, and arrays of meshes. But now that I think about it, thats silly. All basic resources are their own unit. Thats how the gpu sees it. A material would have an id that indexes maps to the texture table. Perhaps I could have a staging table where resources are added. Then a main table where resources go after they have been descriptor written? Or should this be one step? IDK, I'm sure Ill figure something out.
+
+// I am thinking of a system like this - All meshes, models, resources, etc. that are loaded are owned by the engine. A handle is returned to refer to them. "Loading" means storing on the gpu since I can't think of good reason to have it around in ram. Anyways, when rendering, you'd do something like draw_mesh(mesh handle, material handle) and then the backend would map the handle to whatever mesh is being requested to draw, and it would add it to render context that is generated per frame. Maybe for streaming what I could try is that if the handle doesn't exist, it makes it exist and if a handle isn't requested for long enough, it unloads the resource? I did something similar (identical) to this in my 2d opengl engine. Only a texture cache had purpose there since there was no need for vertex or index buffers. One glaring difference was the state didn't own resources. The texture cache owned and flushed resources. So in the vulkan engine, I would ideally see what all textures are being requested by the cache and the descriptor write them. This is just an idea btw. I will cross this bridge when I get there. I am just dumping ideas. Also, word wrap is objectively superior. I fit 4 panels on my 15 inch laptop screen. 80 col limit is bs. For anyone reading this, word wrap is better because regardless of screen size, things will always fit cleanly.
 
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
@@ -774,7 +784,7 @@ function void r_vulkan_imEndSubmit()
 	vkWaitForFences(r_vulkan_state->device, 1, &r_vulkan_state->im_fence, VK_TRUE, UINT64_MAX);
 }
 
-function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
+function R_VULKAN_Image r_vulkan_uploadImage(Bitmap bmp)
 {
 	R_VULKAN_Image out = {0};
 	
@@ -940,40 +950,24 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 	return out;
 }
 
+function void r_vulkan_uploadTexture()
+{
+	
+}
+
 function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 {
 	GLTF_Model model = gltf_load_mesh(scratch, scratch, str8_lit("asuka/scene.gltf"));
 	
+	for(u32 j = 0; j < model.num_textures; j++)
+	{
+		R_VULKAN_Image *image = r_vulkan_state->textures + r_vulkan_state->num_textures++;
+		
+		*image = r_vulkan_uploadImage(model.textures[j]);
+	}
+	
 	r_vulkan_state->model.num_meshes = model.num_meshes;
 	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
-	
-	VkDescriptorImageInfo *img_info = pushArray(scratch, VkDescriptorImageInfo, model.num_textures); 
-	
-	for(u32 i = 0; i < R_VULKAN_FRAMES; i++)
-	{
-		R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
-		
-		for(u32 j = 0; j < model.num_textures; j++)
-		{
-			R_VULKAN_Image *image = r_vulkan_state->textures + r_vulkan_state->num_textures++;
-			
-			*image = r_vulkan_image(model.textures[j]);
-			img_info[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			img_info[j].imageView = image->view;
-			img_info[j].sampler = image->sampler;
-		}
-		
-		VkWriteDescriptorSet write = {0};
-		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		write.dstSet = frame->scene_set;
-		write.dstBinding = 0;
-		write.dstArrayElement = 7;
-		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		write.descriptorCount = model.num_textures;
-		write.pImageInfo = img_info;
-		
-		vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
-	}
 	
 	r_vulkan_state->model.num_meshes = model.num_meshes;
 	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
@@ -1319,6 +1313,7 @@ function VkResult r_vulkan_recreateSwapchain(OS_Handle win, Arena *scratch)
 	r_vulkan_cleanupSwapchain();
 	r_vulkan_createSwapchain(win, scratch);
 	
+	//vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
 	return 0;
 }
 
@@ -1340,18 +1335,6 @@ function VkDescriptorSet r_vulkan_allocDescriptorSet(VkDescriptorPool pool, VkDe
 	
 	return set;
 }
-
-/*
-void ubo_update(VmaAllocator allocator, YkBuffer* buffer, void* ubo, size_t size)
-{
-				void* data = 0;
-				vmaMapMemory(allocator, buffer->alloc, &data);
-
-				memcpy(data, ubo, size);
-
-				vmaUnmapMemory(allocator, buffer->alloc);
-}
-*/
 
 function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 {
@@ -2226,29 +2209,31 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 		
 	}
 	
-	// resources
+	// debug bitmaps
 	{
 		r_vulkan_state->textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image, 10);
 		{
 			Bitmap bmp = bitmap(str8_lit("scratch/ell.png"));
-			r_vulkan_state->textures[0] = r_vulkan_image(bmp);
+			r_vulkan_state->textures[r_vulkan_state->num_textures++] = r_vulkan_uploadImage(bmp);
 		}
 		{
 			Bitmap bmp = bitmap(str8_lit("scratch/marhall.png"));
-			r_vulkan_state->textures[1] = r_vulkan_image(bmp);
+			r_vulkan_state->textures[r_vulkan_state->num_textures++] = r_vulkan_uploadImage(bmp);
 		}
 		{
 			Bitmap bmp = bitmap(str8_lit("scratch/maruko.png"));
-			r_vulkan_state->textures[2] = r_vulkan_image(bmp);
+			r_vulkan_state->textures[r_vulkan_state->num_textures++] = r_vulkan_uploadImage(bmp);
 		}
 		{
 			Bitmap bmp = bitmap(str8_lit("scratch/ankha.png"));
-			r_vulkan_state->textures[3] = r_vulkan_image(bmp);
+			r_vulkan_state->textures[r_vulkan_state->num_textures++] = r_vulkan_uploadImage(bmp);
 		}
 	}
 	
-	// descriptor set
+	// mega descriptor set
 	{
+		
+		// allocate pools
 		VkDescriptorPoolSize sizes[1] = {
 			[0] = {
 				.descriptorCount = 4,
@@ -2268,12 +2253,13 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 		res = vkCreateDescriptorPool(r_vulkan_state->device, &info, 0, &r_vulkan_state->descriptor_pool);
 		r_vulkanAssert(res);
 		
-		// scene descriptor
+		// allocate sets
 		for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
 		{
 			R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
 			frame->scene_set = r_vulkan_allocDescriptorSet(r_vulkan_state->descriptor_pool, &r_vulkan_state->descriptor_set_layout);
 			
+			// scene buffer
 			{
 				frame->scene_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_SceneData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
@@ -2284,6 +2270,8 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 				frame->scene_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 				
 			}
+			
+			// 3d rect instance buffer
 			{
 				frame->rect3_inst_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_Rect3InstanceData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
@@ -2293,32 +2281,37 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 				
 				frame->rect3_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 			}
-			
-			VkDescriptorImageInfo img_info[4] = {0}; 
-			
-			for(s32 i = 0; i < 4; i++)
-			{
-				img_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				img_info[i].imageView = r_vulkan_state->textures[i].view;
-				img_info[i].sampler = r_vulkan_state->textures[i].sampler;
-			}
-			
-			VkWriteDescriptorSet writes[4] = {0};
-			
-			for(s32 i = 0; i < 4; i++)
-			{
-				VkWriteDescriptorSet *write = writes + i;
-				write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				write->dstSet = frame->scene_set;
-				write->dstBinding = 0;
-				write->dstArrayElement = i;
-				write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				write->descriptorCount = 1;
-				write->pImageInfo = &img_info[i];
-			}
-			
-			vkUpdateDescriptorSets(r_vulkan_state->device, 4, writes, 0, 0);
 		}
+	}
+}
+
+function void r_vulkan_updateDescriptorSets(Arena *scratch)
+{
+	for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
+	{
+		R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
+		
+		VkDescriptorImageInfo *img_info = pushArray(scratch, VkDescriptorImageInfo, r_vulkan_state->num_textures); 
+		
+		for(u32 j = 0; j < r_vulkan_state->num_textures; j++)
+		{
+			R_VULKAN_Image *image = r_vulkan_state->textures + j;
+			img_info[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			img_info[j].imageView = image->view;
+			img_info[j].sampler = image->sampler;
+		}
+		
+		VkWriteDescriptorSet write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = frame->scene_set,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = r_vulkan_state->num_textures,
+			.pImageInfo = img_info,
+		};
+		
+		vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
 	}
 }
 

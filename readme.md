@@ -6,7 +6,7 @@
 </p>
 </p>
 
-End goal is to learn more about modern gpus and gfx programming. I am exploring bindless rendering, gltf materials and global illumination. I might make a game with it for fun.
+Vulkan research renderer. I am exploring bindless rendering, asset streaming, gltf materials and global illumination. End goal is to learn more about modern gpus and gfx programming. I might make a game with it for fun.
 
 ## 11/24/24
 

@@ -14,6 +14,8 @@ int main(int argc, char *argv[])
 		r_vulkan_innit(win, frame);
 		
 		r_vulkan_uploadVertexIndexData(frame);
+		r_vulkan_updateDescriptorSets(frame);
+		
 		arenaTempEnd(&temp);
 	}
 	
