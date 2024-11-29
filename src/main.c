@@ -27,6 +27,21 @@ int main(int argc, char *argv[])
 		char name[5];
 	}test;
 	
+	typedef enum boba
+	{
+		boba_hi,
+		boba_bye
+	}boba;
+	
+	typedef union id
+	{
+		boba boba;
+		u128 key;
+	}id;
+	
+	id id1 = {.boba = boba_hi};
+	id id2 = {.boba = boba_bye};
+	
 	{
 		test *hi = malloc(sizeof(test));
 		hi->age = 10;
@@ -36,7 +51,7 @@ int main(int argc, char *argv[])
 		hi->name[3] = '4';
 		hi->name[4] = 0;
 		
-		hs_submit(3, str8(hi, sizeof(test)));
+		hs_submit(id1.key, str8(hi, sizeof(test)));
 	}
 	
 	{
@@ -48,20 +63,17 @@ int main(int argc, char *argv[])
 		bye->name[3] = 'a';
 		bye->name[4] = 0;
 		
-		hs_submit(4, str8(bye, sizeof(test)));
+		hs_submit(id2.key, str8(bye, sizeof(test)));
 	}
 	
 	{
-		u64 hash = hs_hashFromKey(3);
-		u64 hash2 = hs_hashFromKey(4);
-		u64 hash3 = hs_hashFromKey(3124);
+		u128 hash = hs_hashFromKey(id1.key);
+		u128 hash2 = hs_hashFromKey(id2.key);
 		
 		HS_Scope *scope = hs_scopeOpen();
 		
 		test *hi = hs_dataFromHash(scope, hash).c;
 		test *bye = hs_dataFromHash(scope, hash2).c;
-		
-		
 		
 		hs_scopeClose(scope);
 	}

@@ -3,7 +3,7 @@ struct TC_Node
 {
 	TC_Node *next;
 	TC_Node *prev;
-	u64 hash;
+	u128 hash;
 	R_Handle texture;
 	u32 scope_ref_count;
 };
@@ -19,7 +19,7 @@ typedef struct TC_Touch TC_Touch;
 struct TC_Touch
 {
 	TC_Touch *next;
-	u64 hash;
+	u128 hash;
 };
 
 typedef struct TC_Scope TC_Scope;
@@ -53,7 +53,7 @@ function void tc_init()
 	tc_state->slots = pushArray(tc_state->arena, TC_Slot, tc_state->slot_count);
 }
 
-function u64 tc_submit(u64 key, R_Handle handle)
+function u128 tc_submit(u128 key, R_Handle handle)
 {
 	
 }

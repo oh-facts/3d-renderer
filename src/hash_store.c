@@ -3,8 +3,8 @@ struct HS_KeyNode
 {
 	HS_KeyNode *next;
 	HS_KeyNode *prev;
-	u64 key;
-	u64 hash;
+	u128 key;
+	u128 hash;
 };
 
 typedef struct HS_KeySlot HS_KeySlot;
@@ -19,7 +19,7 @@ struct HS_Node
 {
 	HS_Node *next;
 	HS_Node *prev;
-	u64 hash;
+	u128 hash;
 	Str8 data;
 	u32 key_ref_count;
 	u32 scope_ref_count;
@@ -36,7 +36,7 @@ typedef struct HS_Touch HS_Touch;
 struct HS_Touch
 {
 	HS_Touch *next;
-	u64 hash;
+	u128 hash;
 };
 
 typedef struct HS_Scope HS_Scope;
@@ -78,29 +78,26 @@ function void hs_init()
 	hs_state->key_slots = pushArray(hs_state->arena, HS_KeySlot, hs_state->key_slot_count);
 }
 
-// djb2
-function u64 hs_hash(Str8 str)
+function u128 hs_hash(Str8 str)
 {
-	u64 hash = 5381;
-	s32 c;
-	
-	for(u32 i = 0; i < str.len; i++)
-	{
-		c = str.c[i];
-		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-	}
-	
-	return hash;
+	u128 u128 = {0};
+  blake2b((u8 *)&u128.u64[0], sizeof(u128), str.c, str.len, 0, 0);
+  return u128;
 }
 
-function u64 hs_submit(u64 key, Str8 data)
+function b32 u128_equals(u128 a, u128 b)
 {
-	u64 hash = hs_hash(data);
-	u64 slot_index = hash % hs_state->slot_count;
+	return (a.u64[0] == b.u64[0]) && (a.u64[1] == b.u64[1]);
+}
+
+function u128 hs_submit(u128 key, Str8 data)
+{
+	u128 hash = hs_hash(data);
+	u64 slot_index = hash.u64[1] % hs_state->slot_count;
 	
 	HS_Slot *slot = hs_state->slots + slot_index;
 	
-	u64 key_slot_index = key % hs_state->key_slot_count;
+	u64 key_slot_index = key.u64[1] % hs_state->key_slot_count;
 	
 	HS_KeySlot *key_slot = hs_state->key_slots + key_slot_index;
 	
@@ -110,7 +107,7 @@ function u64 hs_submit(u64 key, Str8 data)
 		
 		for(HS_Node *cur = slot->first; cur; cur = cur->next)
 		{
-			if(cur->hash == hash)
+			if(u128_equals(cur->hash, hash))
 			{
 				exists = cur;
 			}
@@ -154,7 +151,7 @@ function u64 hs_submit(u64 key, Str8 data)
 		HS_KeyNode *key_node = 0;
 		for(HS_KeyNode *cur = key_slot->first; cur; cur = cur->next)
 		{
-			if(cur->key == key)
+			if(u128_equals(cur->key, key))
 			{
 				key_node = cur;
 				break;
@@ -192,16 +189,16 @@ function u64 hs_submit(u64 key, Str8 data)
 	return hash;
 }
 
-function u64 hs_hashFromKey(u64 key)
+function u128 hs_hashFromKey(u128 key)
 {
-	u64 out = 0;
+	u128 out = {0};
 	
-	u64 key_slot_index = key % hs_state->slot_count;
+	u64 key_slot_index = key.u64[1] % hs_state->slot_count;
 	HS_KeySlot *key_slot = hs_state->key_slots + key_slot_index;
 	
 	for(HS_KeyNode *cur = key_slot->first; cur; cur = cur->next)
 	{
-		if(cur->key ==  key)
+		if(u128_equals(cur->key, key))
 		{
 			out = cur->hash;
 			break;
@@ -210,15 +207,15 @@ function u64 hs_hashFromKey(u64 key)
 	return out;
 }
 
-function Str8 hs_dataFromHash(HS_Scope *scope, u64 hash)
+function Str8 hs_dataFromHash(HS_Scope *scope, u128 hash)
 {
 	Str8 out = {0};
-	u64 slot_index = hash % hs_state->slot_count;
+	u64 slot_index = hash.u64[1] % hs_state->slot_count;
 	HS_Slot *slot = hs_state->slots + slot_index;
 	
 	for(HS_Node *cur = slot->first; cur; cur = cur->next)
 	{
-		if(cur->hash = hash)
+		if(u128_equals(cur->hash, hash))
 		{
 			out = cur->data;
 			cur->scope_ref_count+=1;
@@ -264,15 +261,15 @@ function void hs_scopeClose(HS_Scope *scope)
 {
 	for(HS_Touch *touch = scope->top_touch, *next = 0; touch; touch = next)
 	{
-		u64 hash = touch->hash;
+		u128 hash = touch->hash;
 		next = touch->next;
 		
-		u64 slot_index = hash % hs_state->slot_count;
+		u64 slot_index = hash.u64[1] % hs_state->slot_count;
 		HS_Slot *slot = hs_state->slots + slot_index;
 		
 		for(HS_Node *node = slot->first; node; node = node->next)
 		{
-			if(node->hash == hash)
+			if(u128_equals(node->hash, hash))
 			{
 				node->scope_ref_count-=1;
 				break;

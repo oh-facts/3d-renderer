@@ -59,6 +59,12 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+typedef struct u128 u128;
+struct u128
+{
+	u64 u64[2];
+};
+
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
@@ -184,5 +190,9 @@ typedef int32_t b32;
 #include "os_glfw.c"
 
 #include "render_vulkan.c"
+
+#define HAVE_SSE2
+#include <blake2/blake2.h>
+#include <blake2/blake2b.c>
 #include "hash_store.c"
 #include "texture_cache.c"
