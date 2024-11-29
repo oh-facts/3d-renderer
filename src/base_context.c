@@ -142,7 +142,6 @@ typedef int32_t b32;
 #include "base_math.c"
 #include "base_string.c"
 #include "base_file.c"
-
 #include "os_gfx.c"
 
 #undef function
@@ -185,3 +184,5 @@ typedef int32_t b32;
 #include "os_glfw.c"
 
 #include "render_vulkan.c"
+#include "hash_store.c"
+#include "texture_cache.c"

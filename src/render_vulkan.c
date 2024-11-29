@@ -210,49 +210,49 @@ struct R_VULKAN_Buffer
 typedef struct R_Handle R_Handle;
 struct R_Handle
 {
- u64 u64[2];
+	u64 u64[2];
 };
 
 typedef struct GLTF_Vertex GLTF_Vertex;
 struct GLTF_Vertex
 {
- V3F pos;
- f32 uv_x;
- V3F normal;
- f32 uv_y;
- V4F color;
+	V3F pos;
+	f32 uv_x;
+	V3F normal;
+	f32 uv_y;
+	V4F color;
 };
 
 typedef struct GLTF_Primitive GLTF_Primitive;
 struct GLTF_Primitive
 {
- u32 start;
- u32 count;
+	u32 start;
+	u32 count;
 	
- Str8 base_tex;
+	Str8 base_tex;
 };
 
 typedef struct GLTF_Mesh GLTF_Mesh;
 struct GLTF_Mesh
 {
- GLTF_Primitive *primitives;
- u64 num_primitives;
+	GLTF_Primitive *primitives;
+	u64 num_primitives;
 	
- u32 *indices;
- u32 num_indices;
+	u32 *indices;
+	u32 num_indices;
 	
- GLTF_Vertex *vertices;
- u32 num_vertices;
+	GLTF_Vertex *vertices;
+	u32 num_vertices;
 };
 
 typedef struct GLTF_Model GLTF_Model;
 struct GLTF_Model
 {
 	Bitmap *textures;
- u32 num_textures;
+	u32 num_textures;
 	
- GLTF_Mesh *meshes;
- u64 num_meshes;
+	GLTF_Mesh *meshes;
+	u64 num_meshes;
 };
 
 // TODO(mizu): textures go inside engine. an id is held for it
@@ -261,8 +261,8 @@ struct GLTF_Model
 typedef struct R_VULKAN_Primitive R_VULKAN_Primitive;
 struct R_VULKAN_Primitive
 {
- u32 start;
- u32 count;
+	u32 start;
+	u32 count;
 	
 	u32 base_tex_id;
 };
@@ -271,13 +271,13 @@ typedef struct R_VULKAN_Mesh R_VULKAN_Mesh;
 struct R_VULKAN_Mesh
 {
 	R_VULKAN_Primitive *primitives;
- u64 num_primitives;
+	u64 num_primitives;
 	
 	R_VULKAN_Buffer i_buffer;
- u32 num_indices;
+	u32 num_indices;
 	
 	R_VULKAN_Buffer v_buffer;
- u32 num_vertices;
+	u32 num_vertices;
 };
 
 typedef struct R_VULKAN_Model R_VULKAN_Model;
@@ -996,8 +996,8 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 		u64 indices_size = sizeof(u32) * gltf_mesh->num_indices;
 		
 		vk_mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-																																												VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-																																												VMA_MEMORY_USAGE_GPU_ONLY);
+																							VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+																							VMA_MEMORY_USAGE_GPU_ONLY);
 		
 		VkBufferDeviceAddressInfo device_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1007,11 +1007,11 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 		vk_mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 		
 		vk_mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-																																												VMA_MEMORY_USAGE_GPU_ONLY);
+																							VMA_MEMORY_USAGE_GPU_ONLY);
 		
 		R_VULKAN_Buffer staging =
 			r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-																									VMA_MEMORY_USAGE_CPU_TO_GPU);
+														VMA_MEMORY_USAGE_CPU_TO_GPU);
 		
 		void *data = 0;
 		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
@@ -1336,7 +1336,7 @@ function VkDescriptorSet r_vulkan_allocDescriptorSet(VkDescriptorPool pool, VkDe
 	return set;
 }
 
-function void r_vulkan_innit(OS_Handle win, Arena *scratch)
+function void r_vulkan_init(OS_Handle win, Arena *scratch)
 {
 	Arena *arena = arenaAlloc();
 	r_vulkan_state = pushArray(arena, R_VULKAN_State, 1);
@@ -1360,10 +1360,10 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 		vkEnumerateInstanceVersion(&version);
 		
 		printf("\nInstance Version: %d.%d.%d\n\n"
-									,VK_VERSION_MAJOR(version)
-									,VK_VERSION_MINOR(version)
-									,VK_VERSION_PATCH(version)
-									);
+					 ,VK_VERSION_MAJOR(version)
+					 ,VK_VERSION_MINOR(version)
+					 ,VK_VERSION_PATCH(version)
+					 );
 		
 		char *validation_layers[] = {
 #if R_VULKAN_DEBUG
@@ -1488,14 +1488,14 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 			printf("--------index %d--------\n", i);
 			printf("Name: %s\n",props.deviceName);
 			printf("Driver Version: %u.%u.%u\n",
-										VK_VERSION_MAJOR(props.driverVersion),
-										VK_VERSION_MINOR(props.driverVersion),
-										VK_VERSION_PATCH(props.driverVersion));
+						 VK_VERSION_MAJOR(props.driverVersion),
+						 VK_VERSION_MINOR(props.driverVersion),
+						 VK_VERSION_PATCH(props.driverVersion));
 			
 			printf("Api Version: %u.%u.%u\n",
-										VK_VERSION_MAJOR(props.apiVersion),
-										VK_VERSION_MINOR(props.apiVersion),
-										VK_VERSION_PATCH(props.apiVersion));
+						 VK_VERSION_MAJOR(props.apiVersion),
+						 VK_VERSION_MINOR(props.apiVersion),
+						 VK_VERSION_PATCH(props.apiVersion));
 			printf("------------------------\n\n");
 			
 			vkGetPhysicalDeviceFeatures2(phys_devices[i], &features[i]);
@@ -1730,9 +1730,9 @@ function void r_vulkan_innit(OS_Handle win, Arena *scratch)
 		};
 		
 		res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
-																																				&descriptor_layout_info,
-																																				0,
-																																				&r_vulkan_state->descriptor_set_layout);
+																			&descriptor_layout_info,
+																			0,
+																			&r_vulkan_state->descriptor_set_layout);
 		r_vulkanAssert(res);
 		
 		VkPushConstantRange range = {
@@ -2341,7 +2341,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	
 	u32 image_index = -1;
 	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready,
-																													0, &image_index);
+															0, &image_index);
 	
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) 
 	{

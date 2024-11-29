@@ -123,7 +123,7 @@ global OS_State *os_state;
 global OS_EventList event_list;
 global Arena *event_arena;
 
-function void os_innit()
+function void os_init()
 {
 	Arena *arena = arenaAlloc();
 	os_state = pushArray(arena, OS_State, 1);

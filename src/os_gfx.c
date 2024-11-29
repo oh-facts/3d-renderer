@@ -71,12 +71,12 @@ struct OS_EventList
 typedef enum OS_CursorMode OS_CursorMode;
 enum OS_CursorMode
 {
-    OS_CursorMode_Normal,
-    OS_CursorMode_Disabled
+	OS_CursorMode_Normal,
+	OS_CursorMode_Disabled
 };
 
 // OS / video hooks ===================
-function void os_innit();
+function void os_init();
 function OS_EventList os_pollEvents(Arena *arena);
 function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h);
 function V2S os_getWindowSize(OS_Handle win);
@@ -137,12 +137,12 @@ function OS_Event *os_event(OS_EventList *list, OS_Key key, OS_EventKind kind)
 	{
 		if((cur->key == key) && (cur->kind == kind))
 		{
-            out = os_eatEvent(list, cur);
+			out = os_eatEvent(list, cur);
 			break;
 		}
 	}
 	
-    return out;
+	return out;
 }
 
 read_only char *key_names[] = 
@@ -206,7 +206,7 @@ read_only char *key_names[] =
 	[OS_Key_RALT] = "OS_Key_RALT",
 	
 	[OS_Key_LMB] = "lmb",
-    [OS_Key_RMB] = "rmb",
+	[OS_Key_RMB] = "rmb",
 	[OS_Key_MMB] = "mmb",
 	
 	[OS_Key_LEFT] = "OS_Key_LEFT",
@@ -231,31 +231,31 @@ read_only char *event_names[] =
 
 function void os_eventListPrint(OS_EventList *list)
 {
-    for(OS_Event *event = list->first; event; event = event->next)
-    {
-        printf("%s ", event_names[event->kind]);
-        
-        switch(event->kind)
-        {
-            case OS_EventKind_Pressed:
-            case OS_EventKind_Released:
-            {
-                printf("[%s]", key_names[event->key]);
-            }break;
-            
-            case OS_EventKind_MouseMove:
-            {
-                printf("[%.f %.f]", event->mpos.x, event->mpos.y);
-            }break;
-            
-            case OS_EventKind_CloseRequested:
-            case OS_EventKind_NULL:
-            default:
-            {
-                
-            }break;
-        }
-        
-        printf("\r\n");
-    }
+	for(OS_Event *event = list->first; event; event = event->next)
+	{
+		printf("%s ", event_names[event->kind]);
+		
+		switch(event->kind)
+		{
+			case OS_EventKind_Pressed:
+			case OS_EventKind_Released:
+			{
+				printf("[%s]", key_names[event->key]);
+			}break;
+			
+			case OS_EventKind_MouseMove:
+			{
+				printf("[%.f %.f]", event->mpos.x, event->mpos.y);
+			}break;
+			
+			case OS_EventKind_CloseRequested:
+			case OS_EventKind_NULL:
+			default:
+			{
+				
+			}break;
+		}
+		
+		printf("\r\n");
+	}
 }

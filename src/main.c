@@ -2,8 +2,10 @@
 
 int main(int argc, char *argv[])
 {
-	os_innit();
+	os_init();
 	tcxt_init();
+	hs_init();
+	
 	Arena *perm = arenaAlloc();
 	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
 	
@@ -11,12 +13,57 @@ int main(int argc, char *argv[])
 	{
 		ArenaTemp temp = arenaTempBegin(frame);
 		
-		r_vulkan_innit(win, frame);
+		r_vulkan_init(win, frame);
 		
 		r_vulkan_uploadVertexIndexData(frame);
 		r_vulkan_updateDescriptorSets(frame);
 		
 		arenaTempEnd(&temp);
+	}
+	
+	typedef struct
+	{
+		u32 age;
+		char name[5];
+	}test;
+	
+	{
+		test *hi = malloc(sizeof(test));
+		hi->age = 10;
+		hi->name[0] = '1';
+		hi->name[1] = '2';
+		hi->name[2] = '3';
+		hi->name[3] = '4';
+		hi->name[4] = 0;
+		
+		hs_submit(3, str8(hi, sizeof(test)));
+	}
+	
+	{
+		test *bye = malloc(sizeof(test));
+		bye->age = 10;
+		bye->name[0] = '3';
+		bye->name[1] = '1';
+		bye->name[2] = '1';
+		bye->name[3] = 'a';
+		bye->name[4] = 0;
+		
+		hs_submit(4, str8(bye, sizeof(test)));
+	}
+	
+	{
+		u64 hash = hs_hashFromKey(3);
+		u64 hash2 = hs_hashFromKey(4);
+		u64 hash3 = hs_hashFromKey(3124);
+		
+		HS_Scope *scope = hs_scopeOpen();
+		
+		test *hi = hs_dataFromHash(scope, hash).c;
+		test *bye = hs_dataFromHash(scope, hash2).c;
+		
+		
+		
+		hs_scopeClose(scope);
 	}
 	
 	u64 start = os_getPerfCounter();
