@@ -9,8 +9,8 @@ layout(buffer_reference, std430) readonly buffer SceneData{
 };
 
 layout(buffer_reference, std430) readonly buffer InstanceData{ 
-	layout(row_major) mat4 model[256];
-	uint tex_id[256];
+	layout(row_major) mat4 model[4];
+	uint tex_id[4];
 };
 
 layout( push_constant ) uniform constants

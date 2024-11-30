@@ -10,11 +10,11 @@ layout(buffer_reference, std430) readonly buffer SceneData{
 
 struct Vertex
 {
- vec3 pos;
- float uv_x;
+	vec3 pos;
+	float uv_x;
 	vec3 normal;
- float uv_y;
- vec4 color;
+	float uv_y;
+	vec4 color;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer{ 
@@ -26,6 +26,7 @@ layout( push_constant ) uniform constants
 	layout(row_major) mat4 render_matrix;
 	SceneData scene;
 	VertexBuffer vertexBuffer;
+	uint tex_id;
 } PushConstants;
 
 layout(location = 0) out vec3 fragColor;
@@ -38,6 +39,8 @@ void main() {
 	gl_Position = vec4(v.pos, 1.0f) * PushConstants.render_matrix * PushConstants.scene.view * PushConstants.scene.proj;
 	
 	fragColor = v.color.xyz;
+	//fragColor = v.normal;
 	a_uv.x = v.uv_x;
 	a_uv.y = v.uv_y;
+	a_tex_id = PushConstants.tex_id;
 }

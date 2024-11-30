@@ -5,8 +5,8 @@ int main(int argc, char *argv[])
 	os_init();
 	tcxt_init();
 	
-	hs_init();
-	tex_init();
+	//hs_init();
+	//tex_init();
 	
 	Arena *perm = arenaAlloc();
 	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
@@ -18,7 +18,6 @@ int main(int argc, char *argv[])
 		r_vulkan_init(win, frame);
 		
 		r_vulkan_uploadVertexIndexData(frame);
-		r_vulkan_updateDescriptorSets(frame);
 		
 		arenaTempEnd(&temp);
 	}
