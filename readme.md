@@ -8,11 +8,8 @@
 
 Vulkan research renderer. I am exploring bindless rendering, asset streaming, gltf materials and global illumination. End goal is to learn more about modern gpus and gfx programming. I might make a game with it for fun.
 
-## 11/24/24
-
+![](res/ladybird/demo2.png)
 ![](res/ladybird/demo.png)
-
-
 
 ## Compile
 
