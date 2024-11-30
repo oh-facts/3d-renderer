@@ -11,6 +11,8 @@
 
 // I am thinking of a system like this - All meshes, models, resources, etc. that are loaded are owned by the engine. A handle is returned to refer to them. "Loading" means storing on the gpu since I can't think of good reason to have it around in ram. Anyways, when rendering, you'd do something like draw_mesh(mesh handle, material handle) and then the backend would map the handle to whatever mesh is being requested to draw, and it would add it to render context that is generated per frame. Maybe for streaming what I could try is that if the handle doesn't exist, it makes it exist and if a handle isn't requested for long enough, it unloads the resource? I did something similar (identical) to this in my 2d opengl engine. Only a texture cache had purpose there since there was no need for vertex or index buffers. One glaring difference was the state didn't own resources. The texture cache owned and flushed resources. So in the vulkan engine, I would ideally see what all textures are being requested by the cache and the descriptor write them. This is just an idea btw. I will cross this bridge when I get there. I am just dumping ideas. Also, word wrap is objectively superior. I fit 4 panels on my 15 inch laptop screen. 80 col limit is bs. For anyone reading this, word wrap is better because regardless of screen size, things will always fit cleanly.
 
+
+
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
 #define R_VULKAN_FRAMES 3

@@ -194,5 +194,6 @@ typedef int32_t b32;
 #define HAVE_SSE2
 #include <blake2/blake2.h>
 #include <blake2/blake2b.c>
-#include "hash_store.c"
+
+//#include "hash_store.c"
 #include "texture_cache.c"

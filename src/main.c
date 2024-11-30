@@ -4,7 +4,9 @@ int main(int argc, char *argv[])
 {
 	os_init();
 	tcxt_init();
+	
 	hs_init();
+	tex_init();
 	
 	Arena *perm = arenaAlloc();
 	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
@@ -19,63 +21,6 @@ int main(int argc, char *argv[])
 		r_vulkan_updateDescriptorSets(frame);
 		
 		arenaTempEnd(&temp);
-	}
-	
-	typedef struct
-	{
-		u32 age;
-		char name[5];
-	}test;
-	
-	typedef enum boba
-	{
-		boba_hi,
-		boba_bye
-	}boba;
-	
-	typedef union id
-	{
-		boba boba;
-		u128 key;
-	}id;
-	
-	id id1 = {.boba = boba_hi};
-	id id2 = {.boba = boba_bye};
-	
-	{
-		test *hi = malloc(sizeof(test));
-		hi->age = 10;
-		hi->name[0] = '1';
-		hi->name[1] = '2';
-		hi->name[2] = '3';
-		hi->name[3] = '4';
-		hi->name[4] = 0;
-		
-		hs_submit(id1.key, str8(hi, sizeof(test)));
-	}
-	
-	{
-		test *bye = malloc(sizeof(test));
-		bye->age = 10;
-		bye->name[0] = '3';
-		bye->name[1] = '1';
-		bye->name[2] = '1';
-		bye->name[3] = 'a';
-		bye->name[4] = 0;
-		
-		hs_submit(id2.key, str8(bye, sizeof(test)));
-	}
-	
-	{
-		u128 hash = hs_hashFromKey(id1.key);
-		u128 hash2 = hs_hashFromKey(id2.key);
-		
-		HS_Scope *scope = hs_scopeOpen();
-		
-		test *hi = hs_dataFromHash(scope, hash).c;
-		test *bye = hs_dataFromHash(scope, hash2).c;
-		
-		hs_scopeClose(scope);
 	}
 	
 	u64 start = os_getPerfCounter();
