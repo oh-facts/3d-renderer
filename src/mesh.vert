@@ -39,7 +39,7 @@ void main() {
 	gl_Position = vec4(v.pos, 1.0f) * PushConstants.render_matrix * PushConstants.scene.view * PushConstants.scene.proj;
 	
 	fragColor = v.color.xyz;
-	//fragColor = v.normal;
+	fragColor = v.normal;
 	a_uv.x = v.uv_x;
 	a_uv.y = v.uv_y;
 	a_tex_id = PushConstants.tex_id;

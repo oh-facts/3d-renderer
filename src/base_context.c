@@ -130,6 +130,7 @@ typedef int32_t b32;
 #define STB_SPRINTF_IMPLEMENTATION
 #include <stb/stb_sprintf.c>
 
+#define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.c>

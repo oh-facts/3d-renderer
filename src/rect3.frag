@@ -1,6 +1,6 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform sampler2D tex[10];
+layout(set = 0, binding = 0) uniform sampler2D tex[1000];
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) flat in uint a_tex_id;

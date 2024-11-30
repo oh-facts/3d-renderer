@@ -33,9 +33,9 @@ function FileData readFile(Arena *arena, Str8 filepath, FILE_TYPE type)
 		"rb"
 	};
 	
- ArenaTemp temp = scratch_begin(0, 0);
- Str8 dir = os_getAppDir(temp.arena);
- Str8 abs_path = str8_join(temp.arena, dir, filepath);	
+	ArenaTemp temp = scratch_begin(0, 0);
+	Str8 dir = os_getAppDir(temp.arena);
+	Str8 abs_path = str8_join(temp.arena, dir, filepath);	
 	
 	fileOpenImpl(&file, abs_path.c, file_type_table[type]);
 	
@@ -142,7 +142,7 @@ function Bitmap bitmap(Str8 path)
 	Str8 dir = os_getAppDir(temp.arena);
 	Str8 abs_path = str8_join(temp.arena, str8_lit("../res/"), path);	
 	abs_path = str8_join(temp.arena, dir, abs_path);	
-	out.data = stbi_load((char*)abs_path.c, &out.w, &out.h, &out.n, 0);
+	out.data = stbi_load((char*)abs_path.c, &out.w, &out.h, &out.n, STBI_rgb_alpha);
 	
 	scratch_end(&temp);
 	return out;

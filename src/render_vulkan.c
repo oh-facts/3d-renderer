@@ -318,6 +318,8 @@ struct GLTF_Mesh
 	
 	GLTF_Vertex *vertices;
 	u32 num_vertices;
+	
+	M4F transform;
 };
 
 typedef struct GLTF_Model GLTF_Model;
@@ -353,6 +355,8 @@ struct R_VULKAN_Mesh
 	
 	R_VULKAN_Buffer v_buffer;
 	u32 num_vertices;
+	
+	M4F transform;
 };
 
 typedef struct R_VULKAN_Model R_VULKAN_Model;
@@ -385,6 +389,9 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 		mesh->num_primitives = node_mesh->primitives_count;
 		mesh->primitives = pushArray(it->arena, GLTF_Primitive, mesh->num_primitives);
 		
+		size_t m_vertex_num = 0;
+		size_t m_index_num = 0;
+		
 		for(u32 i = 0; i < mesh->num_primitives; i++)
 		{
 			cgltf_primitive *node_prim = node->mesh->primitives + i;
@@ -412,11 +419,11 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 		mesh->indices = pushArray(it->arena, u32, mesh->num_indices);
 		mesh->vertices = pushArray(it->arena, GLTF_Vertex, mesh->num_vertices);
 		
-		u64 init_vtx = 0;
-		u64 init_index = 0;
-		
 		for(u32 i = 0; i < mesh->num_primitives; i++)
 		{
+			u64 init_vtx = m_vertex_num;
+			u64 init_index = m_index_num;
+			
 			cgltf_primitive *node_prim = node->mesh->primitives + i;
 			
 			GLTF_Primitive *p = mesh->primitives + i;
@@ -424,12 +431,12 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 			char *thing = node_prim->material->pbr_metallic_roughness.base_color_texture.texture->image->uri;
 			
 			Str8 uri_str =  str8((u8*)thing, strlen(thing));
-			Str8 full_path = str8_join(it->arena, str8_lit("asuka/"), uri_str);
+			Str8 full_path = str8_join(it->arena, str8_lit("sponza/"), uri_str);
 			pushArray(it->arena, u8, 1);
 			
 			for(s32 j = 0; j < it->model->num_textures; j++)
 			{
-				if(memcmp(full_path.c, it->model->textures[i].c, full_path.len) == 0)
+				if(memcmp(full_path.c, it->model->textures[j].c, full_path.len) == 0)
 				{
 					p->base_tex_index = j;
 				}
@@ -446,10 +453,10 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 				{
 					size_t index = cgltf_accessor_read_index(index_attrib, j);
 					
-					mesh->indices[j + init_index] = index + init_vtx;
+					mesh->indices[j + m_index_num] = index + init_vtx;
 				}
 				
-				init_index += index_attrib->count;
+				m_index_num += index_attrib->count;
 			}
 			
 			// vertices
@@ -459,34 +466,35 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 				
 				if(attrib->type == cgltf_attribute_type_position)
 				{
-					init_vtx = 0;
+					//init_vtx = 0;
 					cgltf_accessor *vert_attrib = attrib->data;
+					m_vertex_num += vert_attrib->count;
 					
 					for(u32 k = 0; k < vert_attrib->count; k++)
 					{
 						cgltf_accessor_read_float(vert_attrib, k, mesh->vertices[k + init_vtx].pos.e, sizeof(f32));
 					}
 					
-					init_vtx += vert_attrib->count;
+					//init_vtx += vert_attrib->count;
 				}
 				
 				// NOTE(mizu): stop cheezing init vtx;
 				
 				if(attrib->type == cgltf_attribute_type_normal)
 				{
-					init_vtx = 0;
+					//init_vtx = 0;
 					cgltf_accessor *norm_attrib = attrib->data;
 					
 					for(u32 k = 0; k < norm_attrib->count; k++)
 					{
 						cgltf_accessor_read_float(norm_attrib, k, mesh->vertices[k + init_vtx].normal.e, sizeof(f32));
 					}
-					init_vtx += norm_attrib->count;
+					//init_vtx += norm_attrib->count;
 				}
 				
 				if(attrib->type == cgltf_attribute_type_color)
 				{
-					init_vtx = 0;
+					//init_vtx = 0;
 					
 					cgltf_accessor *color_attrib = attrib->data;
 					for (u32 k = 0; k < color_attrib->count; k++)
@@ -497,7 +505,7 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 						
 						
 					}
-					init_vtx += color_attrib->count;
+					//init_vtx += color_attrib->count;
 				}
 				
 				if(attrib->type == cgltf_attribute_type_texcoord)
@@ -507,7 +515,7 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 					// TODO(mizu):  difference b/w attrib index 0 and 1
 					if (attrib->index == 0)
 					{
-						init_vtx = 0;
+						//init_vtx = 0;
 						
 						for(u32 k = 0; k < tex_attrib->count; k++)
 						{
@@ -517,13 +525,24 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 							mesh->vertices[k + init_vtx].uv_x = tex[0];
 							mesh->vertices[k + init_vtx].uv_y = 1 - tex[1];
 						}
-						init_vtx += tex_attrib->count;
+						//init_vtx += tex_attrib->count;
 					}
 				}
 				
 			}
 			
 			
+		}
+		
+		f32 mat[16] = {0};
+		cgltf_node_transform_world(node, mat);
+		
+		for (u32 i = 0; i < 4; i++)
+		{
+			for (u32 j = 0; j < 4; j++)
+			{
+				mesh->transform.v[i][j] = mat[i * 4 + j];
+			}
 		}
 		
 		it->mesh_index++;
@@ -594,7 +613,7 @@ function GLTF_Model gltf_load_mesh(Arena *arena, Arena *scratch, Str8 filepath)
 			for(u32 i = 0; i < data->textures_count; i++)
 			{
 				Str8 uri_str = str8((u8*)data->textures[i].image->uri, strlen(data->textures[i].image->uri));
-				Str8 pather = str8_lit("asuka/");
+				Str8 pather = str8_lit("sponza/");
 				
 				pather = str8_join(arena, pather, uri_str);
 				pushArray(arena, u8, 1);
@@ -903,7 +922,7 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 		.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 	};
 	
-	vmaCreateImage(r_vulkan_state->vma, &img_info, &alloc_info, &out.image, &out.memory, 0);
+	r_vulkanAssert(vmaCreateImage(r_vulkan_state->vma, &img_info, &alloc_info, &out.image, &out.memory, 0));
 	
 	VkImageViewCreateInfo view_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -919,13 +938,13 @@ function R_VULKAN_Image r_vulkan_image(Bitmap bmp)
 		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 	};
 	
-	vkCreateImageView(r_vulkan_state->device, &view_info, 0, &out.view);
+	r_vulkanAssert(vkCreateImageView(r_vulkan_state->device, &view_info, 0, &out.view));
 	
 	size_t data_size = (size_t)img_info.extent.width * img_info.extent.height * img_info.extent.depth * 4;
 	
 	R_VULKAN_Buffer staging = r_vulkan_createBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	
-	memcpy(staging.info.pMappedData, bmp.data, data_size);
+	memcpy(staging.info.pMappedData, bmp.data, bmp.w * bmp.h * 4);
 	
 	r_vulkan_imBeginSubmit();
 	
@@ -1083,7 +1102,7 @@ function void r_vulkan_imageWriteDescriptor(R_VULKAN_Image *image)
 
 function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 {
-	GLTF_Model model = gltf_load_mesh(scratch, scratch, str8_lit("asuka/scene.gltf"));
+	GLTF_Model model = gltf_load_mesh(scratch, scratch, str8_lit("sponza/Sponza.gltf"));
 	
 	r_vulkan_state->model.num_textures = model.num_textures;
 	r_vulkan_state->model.textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image, model.num_textures);
@@ -1115,6 +1134,8 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 			vk_mesh->primitives[j].count = gltf_mesh->primitives[j].count;
 			vk_mesh->primitives[j].base_tex_index = gltf_mesh->primitives[j].base_tex_index;
 		}
+		
+		vk_mesh->transform = gltf_mesh->transform;
 	}
 	
 	for(u32 i = 0; i < model.num_meshes; i++)
@@ -1844,7 +1865,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			[0] = {
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 10,
+				.descriptorCount = 1000,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 				.pImmutableSamplers = 0,
 			},
@@ -2344,7 +2365,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 		// allocate pools
 		VkDescriptorPoolSize sizes[1] = {
 			[0] = {
-				.descriptorCount = 4,
+				.descriptorCount = 1000,
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			},
 		};
@@ -2557,9 +2578,11 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	V2S win_size = os_getWindowSize(win);
 	
 	static Camera camera = {
-		.pos.x = -0.2,
-		.pos.z = -0.14,
-		.yaw = 90,
+		.pos.x = 7.17,
+		.pos.y = 0.66,
+		.pos.z = -0.21,
+		.yaw = 180,
+		.pitch = 0,
 	};
 	
 	camUpdate(&camera, events, delta);
@@ -2585,7 +2608,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	
 	for(s32 i = 0; i < MAX_RECT3; i++)
 	{
-		M4F trans = m4f_translate(v3f(i - (MAX_RECT3)/ 2, 0, 5));
+		M4F trans = m4f_translate(v3f(7.17, 0.66, i - (MAX_RECT3)/ 2 -0.21));
 		rect3_inst_data->model[i] = m4f_mul(trans, m4f_rotate(v3f(0, 1, 0), counter));
 		rect3_inst_data->tex_id[i] = i % 4;
 	}
@@ -2621,7 +2644,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 			R_VULKAN_MeshPushConstants push_constants = 
 			{
 				.scene_buffer = frame->scene_buffer.address,
-				.model = m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
+				.model = mesh->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
 				.v_buffer = mesh->v_buffer.address,
 				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index].index->v
 			};
