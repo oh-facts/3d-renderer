@@ -46,8 +46,8 @@ union V3F
 
 function V3F v3f(f32 x, f32 y, f32 z)
 {
-    V3F out = {.x = x, .y = y, .z = z};
-    return out;
+	V3F out = {.x = x, .y = y, .z = z};
+	return out;
 }
 
 typedef union V4F V4F;
@@ -73,13 +73,13 @@ struct RectF32
 function RectF32 rectF32(f32 min_x, f32 min_y, f32 max_x, f32 max_y)
 {
 	RectF32 out = {0};
-
+	
 	out.min.x = min_x;
 	out.min.y = min_y;
-
+	
 	out.max.x = max_x;
 	out.max.y = max_y;
-
+	
 	return out;
 }
 
@@ -137,12 +137,12 @@ function M4F m4f(f32 v)
 	return out;
 }
 
-function M4F m4f_scale(f32 v)
+function M4F m4f_scale(V3F v)
 {
 	M4F out = {
-		.v[0][0] = v,
-		.v[1][1] = v,
-		.v[2][2] = v,
+		.v[0][0] = v.x,
+		.v[1][1] = v.y,
+		.v[2][2] = v.z,
 		.v[3][3] = 1,
 	};
 	return out;
@@ -163,7 +163,7 @@ function V3F v3f_add(V3F a, V3F b)
 		.y = a.y + b.y,
 		.z = a.z + b.z,
 	};
-
+	
 	return out;
 }
 
@@ -174,7 +174,7 @@ function V3F v3f_sub(V3F a, V3F b)
 		.y = a.y - b.y,
 		.z = a.z - b.z,
 	};
-
+	
 	return out;
 }
 
@@ -298,17 +298,17 @@ function M4F m4f_rotate(V3F axis, f32 rad)
 function M4F m4f_mul(M4F a, M4F b)
 {
 	M4F out = {0};
-
+	
 	for(int j = 0; j < 4; j += 1)
 	{
 		for(int i = 0; i < 4; i += 1)
 		{
 			out.v[i][j] = (a.v[0][j]*b.v[i][0] +
-			a.v[1][j]*b.v[i][1] +
-			a.v[2][j]*b.v[i][2] +
-			a.v[3][j]*b.v[i][3]);
+										 a.v[1][j]*b.v[i][1] +
+										 a.v[2][j]*b.v[i][2] +
+										 a.v[3][j]*b.v[i][3]);
 		}
 	}
-
-return out;
+	
+	return out;
 }

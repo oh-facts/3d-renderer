@@ -6,6 +6,7 @@
 layout(buffer_reference, std430) readonly buffer SceneData{ 
 	layout(row_major) mat4 proj;
 	layout(row_major) mat4 view;
+	vec3 view_pos;
 };
 
 layout(buffer_reference, std430) readonly buffer InstanceData{ 
