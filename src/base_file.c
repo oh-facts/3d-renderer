@@ -1,14 +1,6 @@
 // change to OS stuff
 // and add app directory to OS_State
 
-typedef enum FILE_TYPE FILE_TYPE;
-enum FILE_TYPE
-{
-	FILE_TYPE_TEXT,
-	FILE_TYPE_BINARY,
-	FILE_TYPE_COUNT
-};
-
 typedef struct FileData FileData;
 struct FileData
 {
@@ -22,27 +14,19 @@ struct FileData
 #define fileOpenImpl(file, filepath, mode) *file = fopen(filepath, mode)
 #endif
 
-function FileData readFile(Arena *arena, Str8 filepath, FILE_TYPE type)
+function FileData readFile(Arena *arena, Arena *scratch, Str8 filepath)
 {
 	FileData out = {0};
 	FILE *file;
 	
-	read_only char *file_type_table[FILE_TYPE_COUNT] = 
-	{
-		"r",
-		"rb"
-	};
+	Str8 app_dir = os_getAppDir(scratch);
+	Str8 full_path = str8_join(arena, app_dir, filepath);
 	
-	ArenaTemp temp = scratch_begin(0, 0);
-	Str8 dir = os_getAppDir(temp.arena);
-	Str8 abs_path = str8_join(temp.arena, dir, filepath);	
-	
-	fileOpenImpl(&file, abs_path.c, file_type_table[type]);
+	fileOpenImpl(&file, full_path.c, "rb");
 	
 	fseek(file, 0, SEEK_END);
 	
 	out.size = ftell(file);
-	//print("%d", len);
 	
 	fseek(file, 0, SEEK_SET);
 	
@@ -50,55 +34,6 @@ function FileData readFile(Arena *arena, Str8 filepath, FILE_TYPE type)
 	fread(out.bytes, sizeof(u8), out.size, file);
 	
 	fclose(file);
-	
-	return out;
-}
-
-function void writeFile(const char *filepath, FILE_TYPE type, void *data, size_t size)
-{
-	FILE *file;
-	
-	read_only char *file_type_table[FILE_TYPE_COUNT] = 
-	{
-		"w",
-		"wb"
-	};
-	
-	fileOpenImpl(&file, filepath, file_type_table[type]);
-	
-	fwrite(data, size, 1, file);
-	
-	fclose(file);
-	
-}
-
-function b32 copyFile(const char* sourcePath, char* destinationPath)
-{
-	b32 out = 0;
-	
-	FILE* sourceFile, * destinationFile;
-	char buffer[4096];
-	size_t bytesRead;
-	
-	fileOpenImpl(&sourceFile, sourcePath, "rb");
-	
-	if(sourceFile)
-	{
-		fileOpenImpl(&destinationFile, destinationPath, "wb");
-		
-		if(destinationFile)
-		{
-			while ((bytesRead = fread(buffer, 1, sizeof(buffer), sourceFile)) > 0) 
-			{
-				fwrite(buffer, 1, bytesRead, destinationFile);
-			}
-			
-			fclose(sourceFile);
-			fclose(destinationFile);
-			
-			out = 1;
-		}
-	}
 	
 	return out;
 }
@@ -133,17 +68,25 @@ struct Bitmap
 	s32 n;
 };
 
-function Bitmap bitmap(Str8 path)
+function Bitmap bitmap(Arena *arena, Str8 path)
 {
 	Bitmap out = {0};
 	
 	stbi_set_flip_vertically_on_load(1);
-	ArenaTemp temp = scratch_begin(0, 0);
-	Str8 dir = os_getAppDir(temp.arena);
-	Str8 abs_path = str8_join(temp.arena, str8_lit("../res/"), path);	
-	abs_path = str8_join(temp.arena, dir, abs_path);	
-	out.data = stbi_load((char*)abs_path.c, &out.w, &out.h, &out.n, STBI_rgb_alpha);
 	
-	scratch_end(&temp);
+	s32 w = 0;
+	s32 h = 0;
+	s32 n = 0;
+	
+	u8 *bytes = stbi_load(path.c, &w, &h, &n, STBI_rgb_alpha);
+	
+	out.w = w;
+	out.h = h;
+	out.n = 4;
+	out.data = pushArray(arena, u8, out.w * out.h * out.n);
+	memcpy(out.data, bytes, out.w * out.h * out.n);
+	
+	stbi_image_free(bytes);
+	
 	return out;
 }

@@ -1,3 +1,11 @@
+// TODO(mizu): Pull stuff outside of the engine. bucket / push buffer styled rendering. vulkan state shouldn't own resources, except for shit it needs. In fact make a simple drawing api. The idea is that i could get my meshes from anywhere - gltf files, obj or hand crafted, and I should be able to render. Importantly, setting materials should be easy. Also work on the hash store / texture / material cache.
+
+// Infact, r_vulkan_model doesn't even make sense. have a function that draws meshes. At some point later, you can make a draw list. But higher level drawing api can be done later. I am thinking of doing push buffer rendering
+
+// TODO(mizu): Render cubes. Use the blender cube so you get normals, tangents, etc. automatically. Practice lighting on them. Go through the learnopengl lighting route. Do it because why not. Then learn more advanced stuff like pbr materials and indirect lighting.
+
+// TODO(mizu): multiple gltf objects. also do materials properly. must look identical to khronos reference renderer
+
 // TODO(mizu): use ssbo array and pass an id through push constants
 // TODO(mizu): delete old swapchain
 
@@ -175,6 +183,11 @@ struct R_VULKAN_SceneData
 	M4F proj;
 	M4F view;
 	V3F view_pos;
+	f32 pad;
+	V3F light_color;
+	f32 pad2;
+	V3F light_pos;
+	f32 pad3;
 };
 
 typedef struct R_VULKAN_Rect3InstanceData R_VULKAN_Rect3InstanceData;
@@ -298,6 +311,8 @@ struct GLTF_Vertex
 	V3F normal;
 	f32 uv_y;
 	V4F color;
+	V3F tangent;
+	float pad;
 };
 
 typedef struct GLTF_Primitive GLTF_Primitive;
@@ -307,6 +322,7 @@ struct GLTF_Primitive
 	u32 count;
 	
 	u32 base_tex_index;
+	u32 normal_tex_index;
 };
 
 typedef struct GLTF_Mesh GLTF_Mesh;
@@ -344,6 +360,7 @@ struct R_VULKAN_Primitive
 	u32 count;
 	
 	u32 base_tex_index;
+	u32 normal_tex_index;
 };
 
 typedef struct R_VULKAN_Mesh R_VULKAN_Mesh;
@@ -377,7 +394,6 @@ struct GLTF_It
 	u64 mesh_index;
 	GLTF_Model *model;
 	cgltf_data *data;
-	Str8 abs_path;
 	Str8 dir;
 };
 
@@ -430,20 +446,38 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 			
 			GLTF_Primitive *p = mesh->primitives + i;
 			
-			char *thing = node_prim->material->pbr_metallic_roughness.base_color_texture.texture->image->uri;
-			
-			Str8 uri_str =  str8((u8*)thing, strlen(thing));
-			Str8 full_path = str8_join(it->arena, str8_lit("sponza/"), uri_str);
-			pushArray(it->arena, u8, 1);
-			
-			for(s32 j = 0; j < it->model->num_textures; j++)
+			if(node_prim->material->pbr_metallic_roughness.base_color_texture.texture)
 			{
-				if(memcmp(full_path.c, it->model->textures[j].c, full_path.len) == 0)
+				char *base_color_tex = node_prim->material->pbr_metallic_roughness.base_color_texture.texture->image->uri;
+				
+				Str8 uri_str =  str8((u8*)base_color_tex, strlen(base_color_tex));
+				
+				for(s32 j = 0; j < it->model->num_textures; j++)
 				{
-					p->base_tex_index = j;
+					if(memcmp(uri_str.c, it->model->textures[j].c, uri_str.len) == 0)
+					{
+						p->base_tex_index = j;
+						break;
+					}
+					
 				}
 			}
 			
+			if(node_prim->material->normal_texture.texture)
+			{
+				char *base_normal_tex = node_prim->material->normal_texture.texture->image->uri;
+				
+				Str8 uri_str =  str8((u8*)base_normal_tex, strlen(base_normal_tex));
+				
+				for(s32 j = 0; j < it->model->num_textures; j++)
+				{
+					if(memcmp(uri_str.c, it->model->textures[j].c, uri_str.len) == 0)
+					{
+						p->normal_tex_index = j;
+						break;
+					}
+				}
+			}
 			cgltf_accessor *index_attrib = node_prim->indices;
 			
 			p->start = init_index;
@@ -468,7 +502,6 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 				
 				if(attrib->type == cgltf_attribute_type_position)
 				{
-					//init_vtx = 0;
 					cgltf_accessor *vert_attrib = attrib->data;
 					m_vertex_num += vert_attrib->count;
 					
@@ -476,38 +509,25 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 					{
 						cgltf_accessor_read_float(vert_attrib, k, mesh->vertices[k + init_vtx].pos.e, sizeof(f32));
 					}
-					
-					//init_vtx += vert_attrib->count;
 				}
-				
-				// NOTE(mizu): stop cheezing init vtx;
 				
 				if(attrib->type == cgltf_attribute_type_normal)
 				{
-					//init_vtx = 0;
 					cgltf_accessor *norm_attrib = attrib->data;
 					
 					for(u32 k = 0; k < norm_attrib->count; k++)
 					{
 						cgltf_accessor_read_float(norm_attrib, k, mesh->vertices[k + init_vtx].normal.e, sizeof(f32));
 					}
-					//init_vtx += norm_attrib->count;
 				}
 				
 				if(attrib->type == cgltf_attribute_type_color)
 				{
-					//init_vtx = 0;
-					
 					cgltf_accessor *color_attrib = attrib->data;
 					for (u32 k = 0; k < color_attrib->count; k++)
 					{
 						cgltf_accessor_read_float(color_attrib, k, mesh->vertices[k + init_vtx].color.e, sizeof(f32));
-						
-						//printf("%f %f %f %f\n", mesh->vertices[k + init_vtx].color.e[0], mesh->vertices[k + init_vtx].color.e[1], mesh->vertices[k + init_vtx].color.e[2], mesh->vertices[k + init_vtx].color.e[3]);
-						
-						
 					}
-					//init_vtx += color_attrib->count;
 				}
 				
 				if(attrib->type == cgltf_attribute_type_texcoord)
@@ -517,8 +537,6 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 					// TODO(mizu):  difference b/w attrib index 0 and 1
 					if (attrib->index == 0)
 					{
-						//init_vtx = 0;
-						
 						for(u32 k = 0; k < tex_attrib->count; k++)
 						{
 							f32 tex[2] = {0};
@@ -527,10 +545,17 @@ function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
 							mesh->vertices[k + init_vtx].uv_x = tex[0];
 							mesh->vertices[k + init_vtx].uv_y = 1 - tex[1];
 						}
-						//init_vtx += tex_attrib->count;
 					}
 				}
 				
+				if(attrib->type == cgltf_attribute_type_tangent)
+				{
+					cgltf_accessor *tangent_attrib = attrib->data;
+					for (u32 k = 0; k < tangent_attrib->count; k++)
+					{
+						cgltf_accessor_read_float(tangent_attrib, k, mesh->vertices[k + init_vtx].tangent.e, sizeof(f32));
+					}
+				}
 			}
 			
 			
@@ -595,18 +620,14 @@ function GLTF_Model gltf_load_mesh(Arena *arena, Arena *scratch, Str8 filepath)
 	
 	GLTF_It it = {0};
 	
-	Str8 app_dir = os_getAppDir(scratch);
-	
-	app_dir = str8_join(scratch, app_dir, str8_lit("../res/"));
-	it.abs_path = str8_join(scratch, app_dir, filepath);
-	pushArray(scratch, u8, 1);
+	it.dir = os_dirFromFile(scratch, filepath);
 	
 	cgltf_options options = {0};
 	cgltf_data *data = 0;
 	
-	if(cgltf_parse_file(&options, (char*)it.abs_path.c, &data) == cgltf_result_success)
+	if(cgltf_parse_file(&options, filepath.c, &data) == cgltf_result_success)
 	{
-		if(cgltf_load_buffers(&options, data, (char*)it.abs_path.c) == cgltf_result_success)
+		if(cgltf_load_buffers(&options, data, filepath.c) == cgltf_result_success)
 		{
 			// load textures
 			out.num_textures = data->textures_count;
@@ -614,13 +635,13 @@ function GLTF_Model gltf_load_mesh(Arena *arena, Arena *scratch, Str8 filepath)
 			
 			for(u32 i = 0; i < data->textures_count; i++)
 			{
-				Str8 uri_str = str8((u8*)data->textures[i].image->uri, strlen(data->textures[i].image->uri));
-				Str8 pather = str8_lit("sponza/");
+				Str8 uri_str = {0};
+				uri_str.c = pushArray(arena, u8, strlen(data->textures[i].image->uri));
+				uri_str.len = strlen(data->textures[i].image->uri);
 				
-				pather = str8_join(arena, pather, uri_str);
-				pushArray(arena, u8, 1);
+				memcpy(uri_str.c, data->textures[i].image->uri, uri_str.len);
 				
-				out.textures[i] = pather;
+				out.textures[i] = uri_str;
 			}
 			
 			// load meshes
@@ -718,6 +739,7 @@ struct R_VULKAN_State
 	// pipelines
 	VkPipeline rect3_pipeline;
 	VkPipeline mesh_pipeline;
+	VkPipeline light_pipeline;
 	
 	// frame render data
 	R_VULKAN_FrameData frames[R_VULKAN_FRAMES];
@@ -727,8 +749,11 @@ struct R_VULKAN_State
 	VkCommandBuffer im_cmd_buffer;
 	VkFence im_fence;
 	
+	R_VULKAN_Image white_texture;
+	
 	// test data
 	R_VULKAN_Model model;
+	R_VULKAN_Model cubes[3];
 	R_VULKAN_Image ell;
 	R_VULKAN_Image marhall;
 	R_VULKAN_Image maruko;
@@ -744,6 +769,10 @@ struct R_VULKAN_MeshPushConstants
 	VkDeviceAddress scene_buffer;
 	VkDeviceAddress v_buffer;
 	u32 base_tex_index;
+	u32 normal_tex_index;
+	u32 pad1;
+	u32 pad2;
+	V3F base_color;
 };
 
 function void r_vulkanAssertImpl(VkResult res)
@@ -841,7 +870,7 @@ global PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
 function VkPipeline r_vulkan_createPipeline(Arena *scratch, Str8 vert_path, Str8 frag_path, VkCullModeFlags cull_mode)
 {
-	FileData vert_src = readFile(scratch, vert_path, FILE_TYPE_BINARY);
+	FileData vert_src = readFile(scratch, scratch, vert_path);
 	VkShaderModuleCreateInfo vert_shader_module_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 		.codeSize = vert_src.size,
@@ -852,7 +881,7 @@ function VkPipeline r_vulkan_createPipeline(Arena *scratch, Str8 vert_path, Str8
 	VkResult res = vkCreateShaderModule(r_vulkan_state->device, &vert_shader_module_info, 0, &vert_module);
 	r_vulkanAssert(res);
 	
-	FileData frag_src = readFile(scratch, frag_path, FILE_TYPE_BINARY);
+	FileData frag_src = readFile(scratch, scratch, frag_path);
 	
 	VkShaderModuleCreateInfo frag_shader_module_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1292,30 +1321,41 @@ function void r_vulkan_imageWriteDescriptor(R_VULKAN_Image *image)
 	}
 }
 
-function void r_vulkan_uploadVertexIndexData(Arena *scratch)
+function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
 {
-	GLTF_Model model = gltf_load_mesh(scratch, scratch, str8_lit("sponza/Sponza.gltf"));
+	R_VULKAN_Model out = {0};
 	
-	r_vulkan_state->model.num_textures = model.num_textures;
-	r_vulkan_state->model.textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image, model.num_textures);
+	Str8 app_dir = os_getAppDir(scratch);
+	pushArray(scratch, u8, 1);
+	
+	Str8 gltf_file_path = str8_join(scratch, app_dir, path);
+	pushArray(scratch, u8, 1);
+	
+	Str8 dir = os_dirFromFile(scratch, gltf_file_path);
+	
+	GLTF_Model model = gltf_load_mesh(scratch, scratch, gltf_file_path);
+	out.num_textures = model.num_textures;
+	out.textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image, model.num_textures);
 	
 	for(u32 j = 0; j < model.num_textures; j++)
 	{
-		Bitmap bmp = bitmap(model.textures[j]);
-		r_vulkan_state->model.textures[j] = r_vulkan_image(bmp);
-		r_vulkan_imageWriteDescriptor(&r_vulkan_state->model.textures[j]);
+		Str8 bmp_path = str8_join(scratch, dir, model.textures[j]);
+		pushArray(scratch, u8, 1);
+		Bitmap bmp = bitmap(scratch, bmp_path);
+		out.textures[j] = r_vulkan_image(bmp);
+		r_vulkan_imageWriteDescriptor(&out.textures[j]);
 	}
 	
-	r_vulkan_state->model.num_meshes = model.num_meshes;
-	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
+	out.num_meshes = model.num_meshes;
+	out.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, out.num_meshes);
 	
-	r_vulkan_state->model.num_meshes = model.num_meshes;
-	r_vulkan_state->model.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, r_vulkan_state->model.num_meshes);
+	out.num_meshes = model.num_meshes;
+	out.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, out.num_meshes);
 	
 	for(u32 i = 0; i < model.num_meshes; i++)
 	{
 		GLTF_Mesh *gltf_mesh = model.meshes + i;
-		R_VULKAN_Mesh *vk_mesh = r_vulkan_state->model.meshes + i;
+		R_VULKAN_Mesh *vk_mesh = out.meshes + i;
 		
 		vk_mesh->num_primitives = gltf_mesh->num_primitives;
 		vk_mesh->primitives = pushArray(r_vulkan_state->arena, R_VULKAN_Primitive, vk_mesh->num_primitives);
@@ -1325,6 +1365,7 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 			vk_mesh->primitives[j].start = gltf_mesh->primitives[j].start;
 			vk_mesh->primitives[j].count = gltf_mesh->primitives[j].count;
 			vk_mesh->primitives[j].base_tex_index = gltf_mesh->primitives[j].base_tex_index;
+			vk_mesh->primitives[j].normal_tex_index = gltf_mesh->primitives[j].normal_tex_index;
 		}
 		
 		vk_mesh->transform = gltf_mesh->transform;
@@ -1333,7 +1374,7 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 	for(u32 i = 0; i < model.num_meshes; i++)
 	{
 		GLTF_Mesh *gltf_mesh = model.meshes + i;
-		R_VULKAN_Mesh *vk_mesh = r_vulkan_state->model.meshes + i;
+		R_VULKAN_Mesh *vk_mesh = out.meshes + i;
 		
 		u64 vertices_size = sizeof(GLTF_Vertex) * gltf_mesh->num_vertices;
 		u64 indices_size = sizeof(u32) * gltf_mesh->num_indices;
@@ -1383,6 +1424,7 @@ function void r_vulkan_uploadVertexIndexData(Arena *scratch)
 		r_vulkan_destroyBuffer(&staging);
 	}
 	
+	return out;
 }
 
 // section: swapchain ===============================
@@ -2102,6 +2144,8 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 		r_vulkan_state->rect3_pipeline = r_vulkan_createPipeline(scratch, str8_lit("rect3.vert.spv"), str8_lit("rect3.frag.spv"), VK_CULL_MODE_NONE);
 		
 		r_vulkan_state->mesh_pipeline = r_vulkan_createPipeline(scratch, str8_lit("mesh.vert.spv"), str8_lit("mesh.frag.spv"), VK_CULL_MODE_BACK_BIT);
+		
+		r_vulkan_state->light_pipeline = r_vulkan_createPipeline(scratch, str8_lit("light.vert.spv"), str8_lit("light.frag.spv"), VK_CULL_MODE_BACK_BIT);
 	}
 	
 	// cmd buffers
@@ -2238,23 +2282,42 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 	
 	// test bitmaps
 	{
+		Str8 app_dir = os_getAppDir(scratch);
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/ell.png"));
+			u32 data[] = {0xFFFFFFFF};
+			Bitmap bmp = {
+				.data =&data,
+				.w = 1,
+				.h = 1,
+				.n = 4
+			};
+			
+			r_vulkan_state->white_texture = r_vulkan_image(bmp);
+			r_vulkan_imageWriteDescriptor(&r_vulkan_state->white_texture);
+		}
+		
+		{
+			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/ell.png"));
+			
+			Bitmap bmp = bitmap(scratch, bmp_path);
 			r_vulkan_state->ell = r_vulkan_image(bmp);
 			r_vulkan_imageWriteDescriptor(&r_vulkan_state->ell);
 		}
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/marhall.png"));
+			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/marhall.png"));
+			Bitmap bmp = bitmap(scratch, bmp_path);
 			r_vulkan_state->marhall = r_vulkan_image(bmp);
 			r_vulkan_imageWriteDescriptor(&r_vulkan_state->marhall);
 		}
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/maruko.png"));
+			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/maruko.png"));
+			Bitmap bmp = bitmap(scratch, bmp_path);
 			r_vulkan_state->maruko = r_vulkan_image(bmp);
 			r_vulkan_imageWriteDescriptor(&r_vulkan_state->maruko);
 		}
 		{
-			Bitmap bmp = bitmap(str8_lit("scratch/ankha.png"));
+			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/ankha.png"));
+			Bitmap bmp = bitmap(scratch, bmp_path);
 			r_vulkan_state->ankha = r_vulkan_image(bmp);
 			r_vulkan_imageWriteDescriptor(&r_vulkan_state->ankha);
 		}
@@ -2412,6 +2475,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	camUpdate(&camera, events, delta);
 	
 	//M4F view = m4f_lookAt((V3F){.z = -3}, (V3F){.z = 0}, (V3F){.y = 1});
+	V3F light_color = v3f(1.0f, 1.0f, 1.0f);
+	V3F light_pos = v3f(5.7, 1.3, 1);
 	
 	R_VULKAN_SceneData scene_data = {
 		.proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
@@ -2422,6 +2487,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 		//.model = m4f(1)
 		//.model = m4f_translate(v3f(0, 0.2, 0))
 		.view_pos = camera.pos,
+		.light_color = light_color,
+		.light_pos = light_pos,
 	};
 	
 	void* mappedData;
@@ -2441,7 +2508,6 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 		rect3_inst_data->tex_id[i] = i % 4;
 	}
 	
-	mappedData;
 	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc, &mappedData);
 	memcpy(mappedData, rect3_inst_data, sizeof(R_VULKAN_Rect3InstanceData));
 	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc);
@@ -2474,7 +2540,9 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 				.scene_buffer = frame->scene_buffer.address,
 				.model = mesh->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
 				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index].index->v
+				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index].index->v,
+				.normal_tex_index = r_vulkan_state->model.textures[prim->normal_tex_index].index->v,
+				.base_color = v3f(1, 1, 1),
 			};
 			
 			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
@@ -2482,7 +2550,59 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
 		}
 	}
+	
+	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
+	{
+		R_VULKAN_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
+		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		
+		for(u32 j = 0; j < mesh->num_primitives; j++)
+		{
+			R_VULKAN_Primitive *prim = mesh->primitives + j;
+			R_VULKAN_MeshPushConstants push_constants = 
+			{
+				.scene_buffer = frame->scene_buffer.address,
+				.model = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2))),
+				.v_buffer = mesh->v_buffer.address,
+				.base_tex_index = r_vulkan_state->white_texture.index->v,
+				.normal_tex_index = r_vulkan_state->white_texture.index->v,
+				.base_color = v3f(1.0f, 0.5f, 0.31f),
+			};
+			
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			
+			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
+		}
+	}
+	
 #endif
+	
+	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->light_pipeline);
+	
+	
+	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
+	{
+		R_VULKAN_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
+		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		
+		for(u32 j = 0; j < mesh->num_primitives; j++)
+		{
+			R_VULKAN_Primitive *prim = mesh->primitives + j;
+			R_VULKAN_MeshPushConstants push_constants = 
+			{
+				.scene_buffer = frame->scene_buffer.address,
+				.model = m4f_mul(m4f_translate(light_pos), m4f_scale(v3f(0.2, 0.2, 0.2))),
+				.v_buffer = mesh->v_buffer.address,
+				.base_tex_index = r_vulkan_state->white_texture.index->v,
+				.normal_tex_index = r_vulkan_state->white_texture.index->v,
+				.base_color = light_color,
+			};
+			
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			
+			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
+		}
+	}
 	
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
 	

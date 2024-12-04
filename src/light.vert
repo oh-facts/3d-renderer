@@ -50,10 +50,7 @@ layout (location = 5) out vec3 a_view_pos;
 layout(location = 6) flat out uint a_normal_tex_id;
 layout(location = 7) out vec3 a_tangent;
 layout(location = 8) out vec3 a_bitangent;
-layout(location = 9) out vec3 a_light_color;
-layout(location = 10) out vec3 a_base_color;
-layout(location = 11) out vec3 a_light_pos;
-
+layout(location = 9) out vec3 a_base_color;
 void main() {
 	
 	Vertex v = pc.v_buffer.vertices[gl_VertexIndex];
@@ -64,16 +61,12 @@ void main() {
 	a_uv.x = v.uv_x;
 	a_uv.y = v.uv_y;
 	a_tex_id = pc.tex_id;
-	
+	a_normal = v.normal * mat3(pc.render_matrix);
 	a_frag_pos = vec3(vec4(v.pos, 1.0f) * pc.render_matrix);
-	a_normal = v.normal * mat3(transpose(inverse(pc.render_matrix)));
-	
 	a_view_pos = pc.scene.view_pos;
 	a_normal_tex_id = pc.normal_id;
 	a_tangent = v.tangent * mat3(pc.render_matrix);;
 	
 	a_bitangent = normalize(cross(a_normal, v.tangent));
-	a_light_color = pc.scene.light_color;
 	a_base_color = pc.base_color;
-	a_light_pos = pc.scene.light_pos;
 }

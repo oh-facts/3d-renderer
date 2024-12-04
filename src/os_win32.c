@@ -42,28 +42,31 @@ function void os_sleep(s32 ms)
 	Sleep(ms);
 }
 
+function Str8 os_dirFromFile(Arena *arena, Str8 path)
+{
+	char *c = &path.c[path.len - 1];
+	u32 len = path.len;
+	
+	while(*c != '/' && *c != '\\' && *c != '\0')
+	{
+		c -= 1;
+		len -= 1;
+	}
+	
+	u8 *str = pushArray(arena, u8, len);
+	memcpy(str, path.c, len);
+	
+	Str8 out = str8(str, len);
+	return out;
+}
+
 function Str8 os_getAppDir(Arena *arena)
 {
 	local_persist Str8 out = {0};
-	local_persist b32 initialized = 0;
-	if(!initialized)
-	{
-		initialized = 1;
-		char buffer[256];
-		DWORD len = GetModuleFileName(0, buffer, 256);
-		
-		char *c = &buffer[len];
-		while(*(--c) != '\\')
-		{
-			*c = 0;
-			--len;
-		}
-		
-		u8 *str = pushArray(arena, u8, len);
-		memcpy(str, buffer, len);
-		
-		out = str8(str, len);
-	}
+	char buffer[256];
+	DWORD len = GetModuleFileName(0, buffer, 256);
+	
+	out = os_dirFromFile(arena, str8(buffer, strlen(buffer)));
 	
 	return out;
 }
