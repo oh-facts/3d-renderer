@@ -1,3 +1,19 @@
+typedef struct TEX_KeyNode TEX_KeyNode;
+struct TEX_KeyNode
+{
+	TEX_KeyNode *next;
+	TEX_KeyNode *prev;
+	u128 key;
+	u128 hash;
+};
+
+typedef struct TEX_KeySlot TEX_KeySlot;
+struct TEX_KeySlot
+{
+	TEX_KeyNode *first;
+	TEX_KeyNode *last;
+};
+
 typedef struct TEX_Node TEX_Node;
 struct TEX_Node
 {
@@ -5,7 +21,10 @@ struct TEX_Node
 	TEX_Node *prev;
 	u128 hash;
 	R_Handle v;
+	Str8 data;
 	u32 scope_ref_count;
+	u32 key_ref_count;
+	b32 loaded;
 };
 
 typedef struct TEX_Slot TEX_Slot;
@@ -33,11 +52,15 @@ typedef struct TEX_State TEX_State;
 struct TEX_State 
 {
 	Arena *arena;
+	
 	TEX_Slot *slots;
 	u64 slot_count;
 	
-	TEX_Node *free_nodes;
+	TEX_KeySlot *key_slots;
+	u64 key_slot_count;
 	
+	TEX_Node *free_nodes;
+	TEX_KeyNode *free_key_nodes;
 	TEX_Scope *free_scope;
 	TEX_Touch *free_touch;
 };
@@ -103,19 +126,140 @@ function void tex_scopeClose(TEX_Scope *scope)
 	tex_state->free_scope = scope;
 }
 
-function u128 tex_hashFromKeyData(TEX_Scope *scope, u128 key, Str8 data)
+function u128 tex_hashFromKeyData(u128 key, Str8 data)
 {
+	u128 hash = tex_hash(data);
+	u64 slot_index = hash.u64[1] % tex_state->slot_count;
+	TEX_Slot *slot = tex_state->slots + slot_index;
 	
+	TEX_Node *node = 0;
+	
+	for(TEX_Node *it = slot->first; it; it = it->next)
+	{
+		if(u128_equals(it->hash, hash))
+		{
+			node = it;
+		}
+	}
+	
+	// duplicate load
+	if(node)
+	{
+		free(data.c);
+	}
+	// add to store
+	else
+	{
+		node = tex_state->free_nodes;
+		
+		if(node)
+		{
+			tex_state->free_nodes = tex_state->free_nodes->next;
+			*node = (TEX_Node){0};
+		}
+		else
+		{
+			node = pushArray(tex_state->arena, TEX_Node, 1);
+		}
+		
+		node->hash = hash;
+		node->data = data;
+		
+		if(!slot->first)
+		{
+			slot->first = slot->last = node;
+		}
+		else
+		{
+			node->prev = slot->last;
+			slot->last->next = node;
+			slot->last = node;
+		}
+		
+	}
+	
+	node->key_ref_count += 1;
+	
+	// store key
+	{
+		u64 key_slot_index = key.u64[1] % tex_state->key_slot_count;
+		
+		TEX_KeySlot *key_slot = tex_state->key_slots + key_slot_index;
+		
+		TEX_KeyNode *key_node = 0;
+		for(TEX_KeyNode *cur = key_slot->first; cur; cur = cur->next)
+		{
+			if(u128_equals(cur->key, key))
+			{
+				key_node = cur;
+				break;
+			}
+		}
+		
+		if(!key_node)
+		{
+			key_node = tex_state->free_key_nodes;
+			if(key_node)
+			{
+				tex_state->free_key_nodes = tex_state->free_key_nodes->next;
+			}
+			else
+			{
+				key_node = pushArray(tex_state->arena, TEX_KeyNode, 1);
+			}
+			
+			key_node->key = key;
+			
+			if(!key_slot->first)
+			{
+				key_slot->first = key_slot->last = key_node;
+			}
+			else
+			{
+				key_node->prev = key_slot->last;
+				key_slot->last->next = key_node;
+				key_slot->last = key_node;
+			}
+		}
+		key_node->hash = hash;
+	}
+	
+	return hash;
 }
 
 function u128 tex_hashFromkey(TEX_Scope *scope, u128 key)
 {
+	u128 out = {0};
 	
+	u64 key_slot_index = key.u64[1] % tex_state->slot_count;
+	TEX_KeySlot *key_slot = tex_state->key_slots + key_slot_index;
+	
+	for(TEX_KeyNode *cur = key_slot->first; cur; cur = cur->next)
+	{
+		if(u128_equals(cur->key, key))
+		{
+			out = cur->hash;
+			break;
+		}
+	}
+	return out;
 }
 
-function void tex_releaseKey(u128 key)
+function void tex_evict()
 {
-	
+	for(u32 slot_index = 0; slot_index < tex_state->slot_count; slot_index++)
+	{
+		TEX_Slot *slot = tex_state->slots + slot_index;
+		for(TEX_Node *it = slot->first; it; it = it->next)
+		{
+			if((it->scope_ref_count == 0) && (it->loaded == 1))
+			{
+				R_VULKAN_Image *image = it->v.u64[0];
+				r_vulkan_freeImage(image);
+				it->loaded = 0;
+			}
+		}
+	}
 }
 
 function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
@@ -124,11 +268,13 @@ function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
 	u64 slot_index = hash.u64[1] % tex_state->slot_count;
 	TEX_Slot *slot = tex_state->slots + slot_index;
 	
+	TEX_Node *node = 0;
+	
 	for(TEX_Node *it = slot->first; it; it = it->next)
 	{
 		if(u128_equals(it->hash, hash))
 		{
-			out = it->v;
+			node = it;
 			it->scope_ref_count+=1;
 			TEX_Touch *touch = tex_state->free_touch;
 			
@@ -145,14 +291,19 @@ function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
 			touch->next = scope->top_touch;
 			scope->top_touch = touch;
 			break;
-			
 		}
 	}
 	
-	if(!out.u64[0])
+	Assert(node);
+	
+	if(!node->loaded)
 	{
-		
-		
+		// allocate texture
+		Bitmap bmp = *(Bitmap*)node->data.c;
+		R_VULKAN_Image *image = r_vulkan_image(bmp);
+		r_vulkan_imageWriteDescriptor(image);
+		out.u64[0] = image;
+		node->loaded = 1;
 	}
 	
 	return out;
