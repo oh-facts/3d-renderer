@@ -86,6 +86,10 @@ function Arena *arenaAllocSized(u64 cmt, u64 res)
 {
 	Arena *arena = 0;
 	
+	u64 page_size = os_getPageSize();
+	res = alignPow2(res, page_size);
+	cmt = alignPow2(cmt, page_size);
+	
 	void *memory = os_reserve(res);
 	os_commit(memory, cmt);
 	
@@ -93,7 +97,7 @@ function Arena *arenaAllocSized(u64 cmt, u64 res)
 	arena->used = ARENA_HEADER_SIZE;
 	arena->align = DEFAULT_ALIGN;
 	
-	arena->cmt = alignPow2(cmt, os_getPageSize());
+	arena->cmt = cmt;
 	arena->res = res;
 	
 	return arena;
@@ -102,4 +106,9 @@ function Arena *arenaAllocSized(u64 cmt, u64 res)
 function Arena *arenaAlloc()
 {
 	return arenaAllocSized(ARENA_COMMIT_SIZE, ARENA_RESERVE_SIZE);
+}
+
+function void arenaFree(Arena *arena)
+{
+	os_free(arena, arena->res);
 }

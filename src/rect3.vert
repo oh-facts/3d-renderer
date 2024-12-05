@@ -9,16 +9,22 @@ layout(buffer_reference, std430) readonly buffer SceneData{
 	vec3 view_pos;
 };
 
+struct R_Rect3
+{
+	mat4 model;
+	uint tex_id;
+	uint pad[3];
+};
+
 layout(buffer_reference, std430) readonly buffer InstanceData{ 
-	layout(row_major) mat4 model[4];
-	uint tex_id[4];
+	layout(row_major) R_Rect3 rects[];
 };
 
 layout( push_constant ) uniform constants
 {
 	SceneData scene;
 	InstanceData instance;
-} PushConstants;
+} PC;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out uint a_tex_id;
@@ -55,10 +61,10 @@ vec3 colors[6] = vec3[](
                         );
 
 void main() {
-	gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0) * PushConstants.instance.model[gl_InstanceIndex] * PushConstants.scene.view * PushConstants.scene.proj;
+	gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0) * PC.instance.rects[gl_InstanceIndex].model * PC.scene.view * PC.scene.proj;
 	//gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0) * view * proj;
 	//gl_Position =  vec4(positions[gl_VertexIndex], 0, 1.0);
 	fragColor = colors[gl_VertexIndex];
-	a_tex_id = PushConstants.instance.tex_id[gl_InstanceIndex];
+	a_tex_id = PC.instance.rects[gl_InstanceIndex].tex_id;
 	a_uv = uvs[gl_VertexIndex];
 }

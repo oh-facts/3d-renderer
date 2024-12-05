@@ -65,6 +65,11 @@ struct u128
 	u64 u64[2];
 };
 
+static int32_t u128_equals(u128 a, u128 b)
+{
+	return (a.u64[0] == b.u64[0]) && (a.u64[1] == b.u64[1]);
+}
+
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
@@ -190,6 +195,7 @@ typedef int32_t b32;
 #include <GLFW/glfw3native.h>
 #include "os_glfw.c"
 
+#include "render_core.c"
 #include "render_vulkan.c"
 
 #define HAVE_SSE2

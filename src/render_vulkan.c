@@ -175,8 +175,6 @@ function M4F camGetView(Camera *camera)
 	return m4f_lookAt(camera->pos, v3f_add(camera->pos, dir), CAMERA_UP);
 }
 
-#define MAX_RECT3 4
-
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
 {
@@ -190,24 +188,11 @@ struct R_VULKAN_SceneData
 	f32 pad3;
 };
 
-typedef struct R_VULKAN_Rect3InstanceData R_VULKAN_Rect3InstanceData;
-struct R_VULKAN_Rect3InstanceData
-{
-	M4F model[MAX_RECT3];
-	u32 tex_id[MAX_RECT3];
-};
-
 typedef struct R_VULKAN_Rect3PushConstants R_VULKAN_Rect3PushConstants;
 struct R_VULKAN_Rect3PushConstants
 {
 	VkDeviceAddress scene;
 	VkDeviceAddress instance;
-};
-
-typedef struct R_Handle R_Handle;
-struct R_Handle
-{
-	u64 u64[2];
 };
 
 typedef struct R_VULKAN_DescriptorIndex R_VULKAN_DescriptorIndex;
@@ -417,10 +402,6 @@ struct R_VULKAN_State
 	// test data
 	R_VULKAN_Model model;
 	R_VULKAN_Model cubes[3];
-	R_VULKAN_Image *ell;
-	R_VULKAN_Image *marhall;
-	R_VULKAN_Image *maruko;
-	R_VULKAN_Image *ankha;
 };
 
 global R_VULKAN_State *r_vulkan_state;
@@ -2288,7 +2269,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			
 			// 3d rect instance buffer
 			{
-				frame->rect3_inst_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_Rect3InstanceData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				frame->rect3_inst_buffer = r_vulkan_createBuffer(1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
 					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 					.buffer = frame->rect3_inst_buffer.buffer,
@@ -2301,7 +2282,6 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 	
 	// test bitmaps
 	{
-		Str8 app_dir = os_getAppDir(scratch);
 		{
 			u32 data[] = {0xFFFFFFFF};
 			Bitmap bmp = {
@@ -2313,32 +2293,6 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			
 			r_vulkan_state->white_texture = r_vulkan_image(bmp);
 			r_vulkan_imageWriteDescriptor(r_vulkan_state->white_texture);
-		}
-		
-		{
-			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/ell.png"));
-			
-			Bitmap bmp = bitmap(scratch, bmp_path);
-			r_vulkan_state->ell = r_vulkan_image(bmp);
-			r_vulkan_imageWriteDescriptor(r_vulkan_state->ell);
-		}
-		{
-			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/marhall.png"));
-			Bitmap bmp = bitmap(scratch, bmp_path);
-			r_vulkan_state->marhall = r_vulkan_image(bmp);
-			r_vulkan_imageWriteDescriptor(r_vulkan_state->marhall);
-		}
-		{
-			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/maruko.png"));
-			Bitmap bmp = bitmap(scratch, bmp_path);
-			r_vulkan_state->maruko = r_vulkan_image(bmp);
-			r_vulkan_imageWriteDescriptor(r_vulkan_state->maruko);
-		}
-		{
-			Str8 bmp_path = str8_join(scratch, app_dir, str8_lit("../res/scratch/ankha.png"));
-			Bitmap bmp = bitmap(scratch, bmp_path);
-			r_vulkan_state->ankha = r_vulkan_image(bmp);
-			r_vulkan_imageWriteDescriptor(r_vulkan_state->ankha);
 		}
 	}
 }
@@ -2359,7 +2313,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 	r_vulkan_state->last_frame_window_size = os_getWindowSize(win);
 }
 
-function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Arena *scratch)
+function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, f32 delta, Arena *scratch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -2515,20 +2469,9 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	memcpy(mappedData, &scene_data, sizeof(R_VULKAN_SceneData));
 	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
 	
-	R_VULKAN_Rect3InstanceData *rect3_inst_data = pushArray(scratch, R_VULKAN_Rect3InstanceData, 1);
-	
-	for(s32 i = 0; i < MAX_RECT3; i++)
-	{
-		M4F model = m4f_translate(v3f(7.17, 0.66, i - (MAX_RECT3)/ 2 -0.21));
-		
-		model = m4f_mul(m4f_scale(v3f(0.5, 0.5, 0.5)), model);
-		
-		rect3_inst_data->model[i] = m4f_mul(model, m4f_rotate(v3f(0, 1, 0), counter));
-		rect3_inst_data->tex_id[i] = i % 4;
-	}
-	
+	// draw rect3 =====================
 	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc, &mappedData);
-	memcpy(mappedData, rect3_inst_data, sizeof(R_VULKAN_Rect3InstanceData));
+	memcpy(mappedData, rect3_batch->base, rect3_batch->size);
 	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc);
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
@@ -2541,8 +2484,12 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, f32 delta, Are
 	
 	vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
 	
-	vkCmdDraw(frame->cmd_buffer, 6, MAX_RECT3, 0, 0);
+	vkCmdDraw(frame->cmd_buffer, 6, rect3_batch->num, 0, 0);
+	// =================
 	
+	// draw meshes =====================
+	
+	// =================
 #if 1
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
 	

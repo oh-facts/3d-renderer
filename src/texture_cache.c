@@ -1,3 +1,9 @@
+// TODO(mizu): delete queue.
+// when something is deleted, its added to a delete queue, that deletes after commands are done executing.
+// also i think tex scope isn't freed properly.
+// also, work on releasing keys
+// then work on asynchronous creation and freeing
+
 typedef struct TEX_KeyNode TEX_KeyNode;
 struct TEX_KeyNode
 {
@@ -22,6 +28,7 @@ struct TEX_Node
 	u128 hash;
 	R_Handle v;
 	Str8 data;
+	Arena *data_arena;
 	u32 scope_ref_count;
 	u32 key_ref_count;
 	b32 loaded;
@@ -75,6 +82,9 @@ function void tex_init()
 	
 	tex_state->slot_count = 1024;
 	tex_state->slots = pushArray(tex_state->arena, TEX_Slot, tex_state->slot_count);
+	
+	tex_state->key_slot_count = 1024;
+	tex_state->key_slots = pushArray(tex_state->arena, TEX_KeySlot, tex_state->key_slot_count);
 }
 
 function u128 tex_hash(Str8 str)
@@ -126,7 +136,7 @@ function void tex_scopeClose(TEX_Scope *scope)
 	tex_state->free_scope = scope;
 }
 
-function u128 tex_hashFromKeyData(u128 key, Str8 data)
+function u128 tex_hashFromKeyData(u128 key, Str8 data, Arena *data_arena)
 {
 	u128 hash = tex_hash(data);
 	u64 slot_index = hash.u64[1] % tex_state->slot_count;
@@ -145,7 +155,7 @@ function u128 tex_hashFromKeyData(u128 key, Str8 data)
 	// duplicate load
 	if(node)
 	{
-		free(data.c);
+		arenaFree(node->data_arena);
 	}
 	// add to store
 	else
@@ -257,6 +267,32 @@ function void tex_evict()
 				R_VULKAN_Image *image = it->v.u64[0];
 				r_vulkan_freeImage(image);
 				it->loaded = 0;
+				
+#if 0
+				if(it->prev)
+				{
+					it->prev->next = it->next;
+				}
+				else
+				{
+					slot->first = it->next;
+				}
+				
+				if (it->next)
+				{
+					it->next->prev = it->prev;
+				}
+				else
+				{
+					slot->last = it->prev;
+				}
+				
+				it->next = it->prev = 0;
+				
+				it->next = tex_state->free_nodes;
+				tex_state->free_nodes = it;
+#endif
+				break;
 			}
 		}
 	}
@@ -302,9 +338,11 @@ function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
 		Bitmap bmp = *(Bitmap*)node->data.c;
 		R_VULKAN_Image *image = r_vulkan_image(bmp);
 		r_vulkan_imageWriteDescriptor(image);
-		out.u64[0] = image;
+		node->v.u64[0] = image;
 		node->loaded = 1;
 	}
+	
+	out = node->v;
 	
 	return out;
 }

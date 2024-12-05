@@ -85,11 +85,6 @@ function u128 hs_hash(Str8 str)
   return u128;
 }
 
-function b32 u128_equals(u128 a, u128 b)
-{
-	return (a.u64[0] == b.u64[0]) && (a.u64[1] == b.u64[1]);
-}
-
 function u128 hs_submit(u128 key, Str8 data)
 {
 	u128 hash = hs_hash(data);
