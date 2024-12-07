@@ -3,11 +3,7 @@
 #extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference : require
 
-layout(buffer_reference, std430) readonly buffer SceneData{ 
-	layout(row_major) mat4 proj;
-	layout(row_major) mat4 view;
-	vec3 view_pos;
-};
+#include "common.glsl"
 
 struct R_Rect3
 {
