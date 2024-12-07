@@ -19,8 +19,8 @@ layout(location = 9) in vec3 a_base_color;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	vec4 texture_color = texture(tex[a_tex_id], a_uv);
-	vec4 normal_color = texture(tex[a_normal_tex_id], a_uv);
+	vec4 texture_color = texture(sampler2Ds[a_tex_id], a_uv);
+	vec4 normal_color = texture(sampler2Ds[a_normal_tex_id], a_uv);
 	
 	out_color = vec4(a_base_color, 1);
 }

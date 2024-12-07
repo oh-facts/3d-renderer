@@ -24,4 +24,10 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 	Vertex vertices[];
 };
 
-layout(set = 0, binding = 0) uniform sampler2D tex[1000];
+#define Corner_00 0
+#define Corner_01 1
+#define Corner_10 2
+#define Corner_11 3
+#define Corner_COUNT 4
+
+layout(set = 0, binding = 0) uniform sampler2D sampler2Ds[1000];

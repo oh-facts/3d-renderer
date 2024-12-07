@@ -12,7 +12,7 @@ layout (location = 2) in vec2 a_uv;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-	vec4 textureColor = texture(tex[a_tex_id], a_uv);
+	vec4 textureColor = texture(sampler2Ds[a_tex_id], a_uv);
 	
 	outColor = textureColor;// * vec4(fragColor, 1);
 }
