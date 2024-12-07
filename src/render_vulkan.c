@@ -19,11 +19,9 @@
 
 // I am thinking of a system like this - All meshes, models, resources, etc. that are loaded are owned by the engine. A handle is returned to refer to them. "Loading" means storing on the gpu since I can't think of good reason to have it around in ram. Anyways, when rendering, you'd do something like draw_mesh(mesh handle, material handle) and then the backend would map the handle to whatever mesh is being requested to draw, and it would add it to render context that is generated per frame. Maybe for streaming what I could try is that if the handle doesn't exist, it makes it exist and if a handle isn't requested for long enough, it unloads the resource? I did something similar (identical) to this in my 2d opengl engine. Only a texture cache had purpose there since there was no need for vertex or index buffers. One glaring difference was the state didn't own resources. The texture cache owned and flushed resources. So in the vulkan engine, I would ideally see what all textures are being requested by the cache and the descriptor write them. This is just an idea btw. I will cross this bridge when I get there. I am just dumping ideas. Also, word wrap is objectively superior. I fit 4 panels on my 15 inch laptop screen. 80 col limit is bs. For anyone reading this, word wrap is better because regardless of screen size, things will always fit cleanly.
 
-
-
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
-#define R_VULKAN_FRAMES 3
+#define R_VULKAN_FRAMES 1
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_beta.h>
 
@@ -195,14 +193,6 @@ struct R_VULKAN_Rect3PushConstants
 	VkDeviceAddress instance;
 };
 
-typedef struct R_VULKAN_DescriptorIndex R_VULKAN_DescriptorIndex;
-struct R_VULKAN_DescriptorIndex
-{
-	R_VULKAN_DescriptorIndex *next;
-	R_VULKAN_DescriptorIndex *prev;
-	u32 v;
-};
-
 typedef struct R_VULKAN_Image R_VULKAN_Image;
 struct R_VULKAN_Image
 {
@@ -214,7 +204,7 @@ struct R_VULKAN_Image
 	VmaAllocation memory;
 	VkExtent3D extent;
 	VkFormat format;
-	R_VULKAN_DescriptorIndex *index;
+	u64 index;
 };
 
 typedef struct R_VULKAN_Buffer R_VULKAN_Buffer;
@@ -224,16 +214,6 @@ struct R_VULKAN_Buffer
 	VkDeviceAddress address;
 	VmaAllocation alloc;
 	VmaAllocationInfo info;
-	R_VULKAN_DescriptorIndex *index;
-};
-
-typedef struct R_VULKAN_DescriptorIndexList R_VULKAN_DescriptorIndexList;
-struct R_VULKAN_DescriptorIndexList
-{
-	R_VULKAN_DescriptorIndex *first;
-	R_VULKAN_DescriptorIndex *last;
-	R_VULKAN_DescriptorIndex *free;
-	u32 counter;
 };
 
 typedef struct GLTF_Vertex GLTF_Vertex;
@@ -380,7 +360,6 @@ struct R_VULKAN_State
 	VkPipelineLayout pipeline_layout;
 	VkDescriptorPool descriptor_pool;
 	VkDescriptorSetLayout descriptor_set_layout;
-	R_VULKAN_DescriptorIndexList image_descriptor_list;
 	
 	// pipelines
 	VkPipeline rect3_pipeline;
@@ -397,68 +376,17 @@ struct R_VULKAN_State
 	
 	R_VULKAN_Image *white_texture;
 	
+	u64 image_indices;
 	R_VULKAN_Image *free_image;
+	R_VULKAN_Image *delete_queue_image;
 	
 	// test data
 	R_VULKAN_Model model;
 	R_VULKAN_Model cubes[3];
+	
 };
 
 global R_VULKAN_State *r_vulkan_state;
-
-function R_VULKAN_DescriptorIndex *r_vulkan_pushDescriptor(R_VULKAN_DescriptorIndexList *list)
-{
-	R_VULKAN_DescriptorIndex *out = list->free;
-	
-	if(!out)
-	{
-		out = pushArray(r_vulkan_state->arena, R_VULKAN_DescriptorIndex, 1);
-		out->v = list->counter++;
-	}
-	else
-	{
-		list->free = list->free->next;
-	}
-	
-	out->next = out->prev = 0;
-	
-	if(!list->first)
-	{
-		list->first = list->last = out;
-	}
-	else
-	{
-		out->prev = list->last;
-		list->last = list->last->next = out;
-	}
-	
-	return out;
-}
-
-function void r_vulkan_freeDescriptorIndex(R_VULKAN_DescriptorIndexList *list, R_VULKAN_DescriptorIndex *node)
-{
-	if(node->prev)
-	{
-		node->prev->next = node->next; 
-	}
-	else
-	{
-		list->first = node->next;
-	}
-	
-	if(node->next)
-	{
-		node->next->prev = node->prev; 
-	}
-	else
-	{
-		list->last = node->prev;
-	}
-	
-	node->prev = 0;
-	node->next = list->free;
-	list->free = node;
-}
 
 typedef struct GLTF_It GLTF_It;
 struct GLTF_It
@@ -1105,15 +1033,20 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	
 	if(out)
 	{
+		u64 image_index = out->index;
 		u64 gen = out->gen;
 		r_vulkan_state->free_image = r_vulkan_state->free_image->next;
 		*out = (R_VULKAN_Image){0};
 		out->gen = gen;
+		out->index = image_index;
 	}
 	else
 	{
 		out = pushArray(r_vulkan_state->arena, R_VULKAN_Image, 1);
+		out->index = r_vulkan_state->image_indices ++;
 	}
+	
+	printf("image created%d\n", out->index);
 	
 	out->gen+=1;
 	
@@ -1275,27 +1208,6 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	};
 	
 	vkCreateSampler(r_vulkan_state->device, &sampler_info, 0, &out->sampler);
-	return out;
-}
-
-function void r_vulkan_freeImage(R_VULKAN_Image *image)
-{
-	vkDestroyImageView(r_vulkan_state->device, image->view, 0);
-	vmaDestroyImage(r_vulkan_state->vma, image->image, image->memory);
-	vkDestroySampler(r_vulkan_state->device, image->sampler, 0);
-	
-	if(image->index)
-	{
-		r_vulkan_freeDescriptorIndex(&r_vulkan_state->image_descriptor_list, image->index);
-	}
-	
-	image->next = r_vulkan_state->free_image;
-	r_vulkan_state->free_image = image;
-}
-
-function void r_vulkan_imageWriteDescriptor(R_VULKAN_Image *image)
-{
-	image->index = r_vulkan_pushDescriptor(&r_vulkan_state->image_descriptor_list);
 	
 	for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
 	{
@@ -1303,15 +1215,15 @@ function void r_vulkan_imageWriteDescriptor(R_VULKAN_Image *image)
 		
 		VkDescriptorImageInfo img_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.imageView = image->view,
-			.sampler = image->sampler,
+			.imageView = out->view,
+			.sampler = out->sampler,
 		};
 		
 		VkWriteDescriptorSet write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = frame->scene_set,
 			.dstBinding = 0,
-			.dstArrayElement = image->index->v,
+			.dstArrayElement = out->index,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.descriptorCount = 1,
 			.pImageInfo = &img_info,
@@ -1319,6 +1231,16 @@ function void r_vulkan_imageWriteDescriptor(R_VULKAN_Image *image)
 		
 		vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
 	}
+	
+	return out;
+}
+
+function void r_vulkan_freeImage(R_VULKAN_Image *image)
+{
+	printf("image deleted %d\n", image->index);
+	
+	image->next = r_vulkan_state->delete_queue_image;
+	r_vulkan_state->delete_queue_image = image;
 }
 
 function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
@@ -1343,7 +1265,6 @@ function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
 		pushArray(scratch, u8, 1);
 		Bitmap bmp = bitmap(scratch, bmp_path);
 		out.textures[j] = r_vulkan_image(bmp);
-		r_vulkan_imageWriteDescriptor(out.textures[j]);
 	}
 	
 	out.num_meshes = model.num_meshes;
@@ -1444,7 +1365,7 @@ function void r_vulkan_cleanupSwapchain()
 	vkDestroyImageView(r_vulkan_state->device, r_vulkan_state->depth_image_view, 0);
 	vmaDestroyImage(r_vulkan_state->vma, r_vulkan_state->depth_image, r_vulkan_state->depth_image_memory);
 	
-	//vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
+	vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
 }
 
 function VkResult r_vulkan_createSwapchain(OS_Handle win, Arena *scratch)
@@ -1501,7 +1422,7 @@ function VkResult r_vulkan_createSwapchain(OS_Handle win, Arena *scratch)
 		.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
 		.presentMode = VK_PRESENT_MODE_FIFO_KHR,
-		.oldSwapchain = r_vulkan_state->swapchain,
+		.oldSwapchain = 0,//r_vulkan_state->swapchain,
 		.clipped = VK_TRUE,
 	};
 	
@@ -1697,8 +1618,6 @@ function VkResult r_vulkan_recreateSwapchain(OS_Handle win, Arena *scratch)
 	vkDeviceWaitIdle(r_vulkan_state->device);
 	r_vulkan_cleanupSwapchain();
 	r_vulkan_createSwapchain(win, scratch);
-	
-	//vkDestroySwapchainKHR(r_vulkan_state->device, r_vulkan_state->swapchain, 0);
 	return 0;
 }
 
@@ -2292,7 +2211,6 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			};
 			
 			r_vulkan_state->white_texture = r_vulkan_image(bmp);
-			r_vulkan_imageWriteDescriptor(r_vulkan_state->white_texture);
 		}
 	}
 }
@@ -2313,13 +2231,31 @@ function void r_vulkan_endRendering(OS_Handle win)
 	r_vulkan_state->last_frame_window_size = os_getWindowSize(win);
 }
 
-function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, f32 delta, Arena *scratch)
+function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, f32 delta, Arena *scratch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
 	
 	VkResult res = vkWaitForFences(r_vulkan_state->device, 1, &frame->fence, VK_TRUE, UINT64_MAX);
 	r_vulkanAssert(res);
+	
+	for(R_VULKAN_Image *image = r_vulkan_state->delete_queue_image, *next = 0; image; image = next)
+	{
+		next = image->next;
+		
+		// remove from deletion queue
+		image->next = 0;
+		r_vulkan_state->delete_queue_image = next;
+		
+		// free image resources
+		vkDestroyImageView(r_vulkan_state->device, image->view, 0);
+		vkDestroySampler(r_vulkan_state->device, image->sampler, 0);
+		vmaDestroyImage(r_vulkan_state->vma, image->image, image->memory);
+		
+		// push to free list
+		image->next = r_vulkan_state->free_image;
+		r_vulkan_state->free_image = image;
+	}
 	
 	u32 image_index = -1;
 	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready,
@@ -2490,7 +2426,7 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 	// draw meshes =====================
 	
 	// =================
-#if 1
+#if 0
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
 	
 	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
@@ -2506,8 +2442,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 				.scene_buffer = frame->scene_buffer.address,
 				.model = mesh->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
 				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index]->index->v,
-				.normal_tex_index = r_vulkan_state->model.textures[prim->normal_tex_index]->index->v,
+				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index]->index,
+				.normal_tex_index = r_vulkan_state->model.textures[prim->normal_tex_index]->index,
 				.base_color = v3f(1, 1, 1),
 			};
 			
@@ -2530,8 +2466,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 				.scene_buffer = frame->scene_buffer.address,
 				.model = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2))),
 				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->white_texture->index->v,
-				.normal_tex_index = r_vulkan_state->white_texture->index->v,
+				.base_tex_index = r_vulkan_state->white_texture->index,
+				.normal_tex_index = r_vulkan_state->white_texture->index,
 				.base_color = v3f(1.0f, 0.5f, 0.31f),
 			};
 			
@@ -2540,8 +2476,6 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
 		}
 	}
-	
-#endif
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->light_pipeline);
 	
@@ -2559,8 +2493,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 				.scene_buffer = frame->scene_buffer.address,
 				.model = m4f_mul(m4f_translate(light_pos), m4f_scale(v3f(0.2, 0.2, 0.2))),
 				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->white_texture->index->v,
-				.normal_tex_index = r_vulkan_state->white_texture->index->v,
+				.base_tex_index = r_vulkan_state->white_texture->index,
+				.normal_tex_index = r_vulkan_state->white_texture->index,
 				.base_color = light_color,
 			};
 			
@@ -2569,6 +2503,8 @@ function void r_vulkanRender(OS_Handle win, OS_EventList *events, R_Batch *rect3
 			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
 		}
 	}
+	
+#endif
 	
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
 	

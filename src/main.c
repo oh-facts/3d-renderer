@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
 		Art_COUNT,
 	};
 	
-	Str8 paths[Art_COUNT] = 
+	Str8 paths[] = 
 	{
 		str8_lit("../res/scratch/ell.png"),
 		str8_lit("../res/scratch/marhall.png"),
@@ -39,9 +39,9 @@ int main(int argc, char *argv[])
 		
 		r_vulkan_init(win, frame);
 		
-		r_vulkan_state->model = r_vulkan_model(str8_lit("../res/sponza/Sponza.gltf"), frame);
+		//r_vulkan_state->model = r_vulkan_model(str8_lit("../res/sponza/Sponza.gltf"), frame);
 		
-		r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
+		//r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
 		
 		for(s32 i = 0; i < Art_COUNT; i++)
 		{
@@ -91,22 +91,24 @@ int main(int argc, char *argv[])
 		counter += delta;
 		
 		TEX_Scope *scope = tex_scopeOpen();
-		for(s32 i = 0; i < 4; i++)
+		for(s32 i = 0; i < 1; i++)
 		{
 			M4F model = m4f_translate(v3f(7.17, 0.66, i - (4)/ 2 -0.21));
 			
 			model = m4f_mul(m4f_scale(v3f(0.5, 0.5, 0.5)), model);
 			model = m4f_mul(model, m4f_rotate(v3f(0, 1, 0), counter));
 			
-			R_Handle handle = tex_handleFromHash(scope, hashes[i]);
+			u32 sprite_index = ((s32)counter) % Art_COUNT;
+			
+			R_Handle handle = tex_handleFromHash(scope, hashes[sprite_index]);
 			R_VULKAN_Image *image = handle.u64[0];
 			
-			r_pushRect3(&batch, model, image->index->v);
+			r_pushRect3(&batch, model, image->index);
 		}
 		tex_scopeClose(scope);
 		
 		//r_vulkan_beginRendering();
-		r_vulkanRender(win, &list, &batch, delta, temp.arena);
+		r_vulkan_render(win, &list, &batch, delta, temp.arena);
 		r_vulkan_endRendering(win);
 		
 		//os_eventListPrint(&list);
@@ -122,6 +124,7 @@ int main(int argc, char *argv[])
 		time_elapsed = (end - start) / (freq * 1.f);
 		delta = time_elapsed - time_since_last;
 		
+		tex_clock_tick();
 		tex_evict();
 	}
 	printf("quit\n");

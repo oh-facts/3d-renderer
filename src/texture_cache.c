@@ -32,6 +32,7 @@ struct TEX_Node
 	u32 scope_ref_count;
 	u32 key_ref_count;
 	b32 loaded;
+	u64 last_touched_tick;
 };
 
 typedef struct TEX_Slot TEX_Slot;
@@ -70,9 +71,16 @@ struct TEX_State
 	TEX_KeyNode *free_key_nodes;
 	TEX_Scope *free_scope;
 	TEX_Touch *free_touch;
+	
+	u64 ticks;
 };
 
 global TEX_State *tex_state;
+
+function void tex_clock_tick()
+{
+	tex_state->ticks+=1;
+}
 
 function void tex_init()
 {
@@ -241,7 +249,7 @@ function u128 tex_hashFromkey(TEX_Scope *scope, u128 key)
 {
 	u128 out = {0};
 	
-	u64 key_slot_index = key.u64[1] % tex_state->slot_count;
+	u64 key_slot_index = key.u64[1] % tex_state->key_slot_count;
 	TEX_KeySlot *key_slot = tex_state->key_slots + key_slot_index;
 	
 	for(TEX_KeyNode *cur = key_slot->first; cur; cur = cur->next)
@@ -262,10 +270,11 @@ function void tex_evict()
 		TEX_Slot *slot = tex_state->slots + slot_index;
 		for(TEX_Node *it = slot->first; it; it = it->next)
 		{
-			if((it->scope_ref_count == 0) && (it->loaded == 1))
+			if((it->scope_ref_count == 0) && (it->loaded == 1) && (it->last_touched_tick + 10 < tex_state->ticks))
 			{
 				R_VULKAN_Image *image = it->v.u64[0];
 				r_vulkan_freeImage(image);
+				
 				it->loaded = 0;
 				
 #if 0
@@ -292,6 +301,7 @@ function void tex_evict()
 				it->next = tex_state->free_nodes;
 				tex_state->free_nodes = it;
 #endif
+				
 				break;
 			}
 		}
@@ -337,11 +347,11 @@ function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
 		// allocate texture
 		Bitmap bmp = *(Bitmap*)node->data.c;
 		R_VULKAN_Image *image = r_vulkan_image(bmp);
-		r_vulkan_imageWriteDescriptor(image);
 		node->v.u64[0] = image;
 		node->loaded = 1;
 	}
 	
+	node->last_touched_tick = tex_state->ticks;
 	out = node->v;
 	
 	return out;
