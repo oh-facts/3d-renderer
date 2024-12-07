@@ -21,7 +21,7 @@
 
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
-#define R_VULKAN_FRAMES 1
+#define R_VULKAN_FRAMES 3
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_beta.h>
 
@@ -198,7 +198,6 @@ struct R_VULKAN_Image
 {
 	R_VULKAN_Image *next;
 	u64 gen;
-	VkSampler sampler;
 	VkImage image;
 	VkImageView view;
 	VmaAllocation memory;
@@ -383,7 +382,7 @@ struct R_VULKAN_State
 	// test data
 	R_VULKAN_Model model;
 	R_VULKAN_Model cubes[3];
-	
+	VkSampler sampler;
 };
 
 global R_VULKAN_State *r_vulkan_state;
@@ -1192,23 +1191,6 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	r_vulkan_imEndSubmit();
 	r_vulkan_destroyBuffer(&staging);
 	
-	VkSamplerCreateInfo sampler_info = {
-		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		.magFilter = VK_FILTER_LINEAR,
-		.minFilter = VK_FILTER_LINEAR,
-		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		
-		// set anistoropyptosy
-		
-		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-		.unnormalizedCoordinates = VK_FALSE,
-		
-	};
-	
-	vkCreateSampler(r_vulkan_state->device, &sampler_info, 0, &out->sampler);
-	
 	for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
 	{
 		R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
@@ -1216,7 +1198,7 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 		VkDescriptorImageInfo img_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			.imageView = out->view,
-			.sampler = out->sampler,
+			.sampler = r_vulkan_state->sampler,
 		};
 		
 		VkWriteDescriptorSet write = {
@@ -1766,9 +1748,16 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 		{
 			// we care for
 			//dyn rendering, sync2, bda and descr indexing
+			
+			VkPhysicalDeviceDescriptorIndexingFeatures descr_indexing = 
+			{
+				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+			};
+			
 			VkPhysicalDeviceDynamicRenderingFeaturesKHR dyn_ren = 
 			{
 				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+				.pNext = &descr_indexing
 			};
 			
 			VkPhysicalDeviceSynchronization2FeaturesKHR sync2 = 
@@ -1804,7 +1793,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			
 			vkGetPhysicalDeviceFeatures2(phys_devices[i], &features[i]);
 			
-			if (dyn_ren.dynamicRendering && sync2.synchronization2 && vk12_feat.bufferDeviceAddress && vk12_feat.descriptorIndexing)
+			if (dyn_ren.dynamicRendering && sync2.synchronization2 && vk12_feat.bufferDeviceAddress && vk12_feat.descriptorIndexing && descr_indexing.descriptorBindingSampledImageUpdateAfterBind)
 			{
 				gpus[i].good = 1;
 			}
@@ -1879,9 +1868,15 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			.pQueuePriorities = q_priorities,
 		};
 		
+		VkPhysicalDeviceDescriptorIndexingFeatures descr_indexing = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+			.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+		};
+		
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync2 = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
 			.synchronization2 = VK_TRUE,
+			.pNext = &descr_indexing,
 		};
 		
 		VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address = {
@@ -2025,9 +2020,20 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			
 		};
 		
+		VkDescriptorBindingFlags binding_flags[1] = {
+			VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
+		};
+		
+		VkDescriptorSetLayoutBindingFlagsCreateInfo bindings_flags_create_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+			.pNext = 0,
+			.bindingCount = arrayLen(descriptor_bindings),
+			.pBindingFlags = &binding_flags,
+		};
+		
 		VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.pNext = 0,
+			.pNext = &bindings_flags_create_info,
 			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
 			.bindingCount = arrayLen(descriptor_bindings),
 			.pBindings = descriptor_bindings,
@@ -2199,6 +2205,26 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 		}
 	}
 	
+	// test sampler
+	{
+		VkSamplerCreateInfo sampler_info = {
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			
+			// set anistoropyptosy
+			
+			.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+			.unnormalizedCoordinates = VK_FALSE,
+			
+		};
+		
+		vkCreateSampler(r_vulkan_state->device, &sampler_info, 0, &r_vulkan_state->sampler);
+	}
+	
 	// test bitmaps
 	{
 		{
@@ -2213,6 +2239,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			r_vulkan_state->white_texture = r_vulkan_image(bmp);
 		}
 	}
+	
 }
 
 function void r_vulkan_beginRendering()
@@ -2229,6 +2256,48 @@ function void r_vulkan_endRendering(OS_Handle win)
 {
 	r_vulkan_state->current_frame_index = (r_vulkan_state->current_frame_index + 1) % R_VULKAN_FRAMES;
 	r_vulkan_state->last_frame_window_size = os_getWindowSize(win);
+	
+	// free textures
+	for(R_VULKAN_Image *image = r_vulkan_state->delete_queue_image, *next = 0; image; image = next)
+	{
+		
+		for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
+		{
+			R_VULKAN_FrameData *frame = r_vulkan_state->frames + i;
+			
+			VkDescriptorImageInfo img_info = {
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.imageView = r_vulkan_state->white_texture->view,
+				.sampler = r_vulkan_state->sampler,
+			};
+			
+			VkWriteDescriptorSet write = {
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = frame->scene_set,
+				.dstBinding = 0,
+				.dstArrayElement = image->index,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.pImageInfo = &img_info,
+			};
+			
+			vkUpdateDescriptorSets(r_vulkan_state->device, 1, &write, 0, 0);
+		}
+		
+		next = image->next;
+		
+		// remove from deletion queue
+		image->next = 0;
+		r_vulkan_state->delete_queue_image = next;
+		
+		// free image resources
+		vkDestroyImageView(r_vulkan_state->device, image->view, 0);
+		vmaDestroyImage(r_vulkan_state->vma, image->image, image->memory);
+		
+		// push to free list
+		image->next = r_vulkan_state->free_image;
+		r_vulkan_state->free_image = image;
+	}
 }
 
 function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, f32 delta, Arena *scratch)
@@ -2238,24 +2307,6 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	
 	VkResult res = vkWaitForFences(r_vulkan_state->device, 1, &frame->fence, VK_TRUE, UINT64_MAX);
 	r_vulkanAssert(res);
-	
-	for(R_VULKAN_Image *image = r_vulkan_state->delete_queue_image, *next = 0; image; image = next)
-	{
-		next = image->next;
-		
-		// remove from deletion queue
-		image->next = 0;
-		r_vulkan_state->delete_queue_image = next;
-		
-		// free image resources
-		vkDestroyImageView(r_vulkan_state->device, image->view, 0);
-		vkDestroySampler(r_vulkan_state->device, image->sampler, 0);
-		vmaDestroyImage(r_vulkan_state->vma, image->image, image->memory);
-		
-		// push to free list
-		image->next = r_vulkan_state->free_image;
-		r_vulkan_state->free_image = image;
-	}
 	
 	u32 image_index = -1;
 	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready,
@@ -2426,7 +2477,7 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	// draw meshes =====================
 	
 	// =================
-#if 0
+#if 1
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
 	
 	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)

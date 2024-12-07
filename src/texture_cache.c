@@ -270,7 +270,7 @@ function void tex_evict()
 		TEX_Slot *slot = tex_state->slots + slot_index;
 		for(TEX_Node *it = slot->first; it; it = it->next)
 		{
-			if((it->scope_ref_count == 0) && (it->loaded == 1) && (it->last_touched_tick + 10 < tex_state->ticks))
+			if((it->scope_ref_count == 0) && (it->loaded == 1) && (it->last_touched_tick + 1 < tex_state->ticks))
 			{
 				R_VULKAN_Image *image = it->v.u64[0];
 				r_vulkan_freeImage(image);

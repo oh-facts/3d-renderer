@@ -39,9 +39,9 @@ int main(int argc, char *argv[])
 		
 		r_vulkan_init(win, frame);
 		
-		//r_vulkan_state->model = r_vulkan_model(str8_lit("../res/sponza/Sponza.gltf"), frame);
+		r_vulkan_state->model = r_vulkan_model(str8_lit("../res/sponza/Sponza.gltf"), frame);
 		
-		//r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
+		r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
 		
 		for(s32 i = 0; i < Art_COUNT; i++)
 		{
