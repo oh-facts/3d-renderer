@@ -1,6 +1,4 @@
 // TODO(mizu): delete queue.
-// when something is deleted, its added to a delete queue, that deletes after commands are done executing.
-// also i think tex scope isn't freed properly.
 // also, work on releasing keys
 // then work on asynchronous creation and freeing
 

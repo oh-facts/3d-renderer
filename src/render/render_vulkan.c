@@ -364,6 +364,7 @@ struct R_VULKAN_State
 	VkPipeline rect3_pipeline;
 	VkPipeline mesh_pipeline;
 	VkPipeline light_pipeline;
+	VkPipeline ui_pipeline;
 	
 	// frame render data
 	R_VULKAN_FrameData frames[R_VULKAN_FRAMES];
@@ -1045,7 +1046,7 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 		out->index = r_vulkan_state->image_indices ++;
 	}
 	
-	printf("image created%d\n", out->index);
+	printf("image created %d\n", out->index);
 	
 	out->gen+=1;
 	
@@ -2064,13 +2065,15 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 		vkCreatePipelineLayout(r_vulkan_state->device, &layout_info, 0, &r_vulkan_state->pipeline_layout);
 	}
 	
-	// build pipelines 
+	// create pipelines 
 	{
 		r_vulkan_state->rect3_pipeline = r_vulkan_createPipeline(scratch, str8_lit("rect3.vert.spv"), str8_lit("rect3.frag.spv"), VK_CULL_MODE_NONE);
 		
 		r_vulkan_state->mesh_pipeline = r_vulkan_createPipeline(scratch, str8_lit("mesh.vert.spv"), str8_lit("mesh.frag.spv"), VK_CULL_MODE_BACK_BIT);
 		
 		r_vulkan_state->light_pipeline = r_vulkan_createPipeline(scratch, str8_lit("light.vert.spv"), str8_lit("light.frag.spv"), VK_CULL_MODE_BACK_BIT);
+		
+		r_vulkan_state->ui_pipeline = r_vulkan_createPipeline(scratch, str8_lit("ui.vert.spv"), str8_lit("ui.frag.spv"), VK_CULL_MODE_BACK_BIT);
 	}
 	
 	// cmd buffers
@@ -2529,7 +2532,6 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	}
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->light_pipeline);
-	
 	
 	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
 	{

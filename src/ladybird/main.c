@@ -1,10 +1,9 @@
-#include "base_context.c"
+#include <base/base_context.c>
 
 int main(int argc, char *argv[])
 {
 	os_init();
 	
-	//hs_init();
 	tex_init();
 	
 	Arena *perm = arenaAlloc();

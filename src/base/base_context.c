@@ -149,26 +149,26 @@ typedef int32_t b32;
 #include <stdio.h>
 #include <math.h>
 
-#include "os_core.c"
-#include "base_core.c"
-#include "base_math.c"
-#include "base_string.c"
-#include "base_file.c"
-#include "os_gfx.c"
+#include <os/os_core.c>
+#include <base/base_core.c>
+#include <base/base_math.c>
+#include <base/base_string.c>
+#include <base/base_file.c>
+#include <os/os_gfx.c>
 
 #undef function
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 #define function static
-#include "os_vulkan.c"
+#include <os/os_vulkan.c>
 
 #if defined(OS_WIN32)
 #undef function
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define function static
-#include "os_win32.c"
+#include <os/os_win32.c>
 #elif defined(OS_LINUX)
 #undef function
 #include <sys/mman.h>
@@ -177,7 +177,7 @@ typedef int32_t b32;
 #include <dlfcn.h>
 #include <time.h>
 #define function static
-#include "os_unix.c"
+#include <os/os_unix.c>
 #elif defined(OS_APPLE)
 #undef function
 #include <sys/mman.h>
@@ -186,20 +186,20 @@ typedef int32_t b32;
 #include <dlfcn.h>
 #include <time.h>
 #define function static
-#include "os_unix.c"
+#include <os/os_unix.c>
 #else
 #error platform not supported
 #endif
 
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-#include "os_glfw.c"
+#include <os/os_glfw.c>
 
-#include "render_core.c"
-#include "render_vulkan.c"
+#include <render/render_core.c>
+#include <render/render_vulkan.c>
 
 #define HAVE_SSE2
 #include <blake2/blake2.h>
 #include <blake2/blake2b.c>
 
-#include "texture_cache.c"
+#include <texture/texture_cache.c>
