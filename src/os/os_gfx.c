@@ -80,7 +80,6 @@ function void os_init();
 function OS_EventList os_pollEvents(Arena *arena);
 function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h);
 function V2S os_getWindowSize(OS_Handle win);
-function V2S os_getWindowSize(OS_Handle win);
 
 function void os_setCursorMode(OS_CursorMode mode);
 function V2F os_getCursorPos();

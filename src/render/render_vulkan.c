@@ -178,12 +178,21 @@ struct R_VULKAN_SceneData
 {
 	M4F proj;
 	M4F view;
+	V2F screen_size;
+	f32 pad0[2];
 	V3F view_pos;
-	f32 pad;
+	f32 pad1;
 	V3F light_color;
 	f32 pad2;
 	V3F light_pos;
 	f32 pad3;
+};
+
+typedef struct R_VULKAN_UIPushConstants R_VULKAN_UIPushConstants;
+struct R_VULKAN_UIPushConstants
+{
+	VkDeviceAddress scene;
+	VkDeviceAddress instance;
 };
 
 typedef struct R_VULKAN_Rect3PushConstants R_VULKAN_Rect3PushConstants;
@@ -311,6 +320,7 @@ struct R_VULKAN_FrameData
 	
 	VkDescriptorSet scene_set;
 	R_VULKAN_Buffer scene_buffer;
+	R_VULKAN_Buffer ui_inst_buffer;
 	R_VULKAN_Buffer rect3_inst_buffer;
 };
 
@@ -361,10 +371,10 @@ struct R_VULKAN_State
 	VkDescriptorSetLayout descriptor_set_layout;
 	
 	// pipelines
+	VkPipeline ui_pipeline;
 	VkPipeline rect3_pipeline;
 	VkPipeline mesh_pipeline;
 	VkPipeline light_pipeline;
-	VkPipeline ui_pipeline;
 	
 	// frame render data
 	R_VULKAN_FrameData frames[R_VULKAN_FRAMES];
@@ -2067,13 +2077,13 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 	
 	// create pipelines 
 	{
+		r_vulkan_state->ui_pipeline = r_vulkan_createPipeline(scratch, str8_lit("ui.vert.spv"), str8_lit("ui.frag.spv"), VK_CULL_MODE_NONE);
+		
 		r_vulkan_state->rect3_pipeline = r_vulkan_createPipeline(scratch, str8_lit("rect3.vert.spv"), str8_lit("rect3.frag.spv"), VK_CULL_MODE_NONE);
 		
 		r_vulkan_state->mesh_pipeline = r_vulkan_createPipeline(scratch, str8_lit("mesh.vert.spv"), str8_lit("mesh.frag.spv"), VK_CULL_MODE_BACK_BIT);
 		
 		r_vulkan_state->light_pipeline = r_vulkan_createPipeline(scratch, str8_lit("light.vert.spv"), str8_lit("light.frag.spv"), VK_CULL_MODE_BACK_BIT);
-		
-		r_vulkan_state->ui_pipeline = r_vulkan_createPipeline(scratch, str8_lit("ui.vert.spv"), str8_lit("ui.frag.spv"), VK_CULL_MODE_BACK_BIT);
 	}
 	
 	// cmd buffers
@@ -2205,6 +2215,18 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 				
 				frame->rect3_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 			}
+			
+			// ui instance buffer
+			{
+				frame->ui_inst_buffer = r_vulkan_createBuffer(1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+				VkBufferDeviceAddressInfo device_info = {
+					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+					.buffer = frame->ui_inst_buffer.buffer,
+				};
+				
+				frame->ui_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+			}
+			
 		}
 	}
 	
@@ -2303,7 +2325,9 @@ function void r_vulkan_endRendering(OS_Handle win)
 	}
 }
 
-function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, f32 delta, Arena *scratch)
+function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch,
+															R_Batch *ui_batch,
+															f32 delta, Arena *scratch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -2425,6 +2449,7 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	static f32 counter = 0;
 	counter += delta;
 	V2S win_size = os_getWindowSize(win);
+	V2F win_size_f = v2f(win_size.x, win_size.y);
 	
 	static Camera camera = {
 		.pos.x = 7.17,
@@ -2444,6 +2469,7 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	R_VULKAN_SceneData scene_data = {
 		.proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
 		.view = camGetView(&camera),
+		.screen_size = win_size_f,
 		//.view = view,
 		//.model[0] = m4f_mul(m4f_translate(v3f(-3, 0, 3)), m4f_rotate(v3f(0, 1, 0), counter)),
 		//.model = m4f_rotate(v3f(0, 1, 0), counter),
@@ -2475,6 +2501,26 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
 	
 	vkCmdDraw(frame->cmd_buffer, 6, rect3_batch->num, 0, 0);
+	// =================
+	
+	// draw ui =====================
+	{
+		vmaMapMemory(r_vulkan_state->vma, frame->ui_inst_buffer.alloc, &mappedData);
+		memcpy(mappedData, ui_batch->base, ui_batch->size);
+		vmaUnmapMemory(r_vulkan_state->vma, frame->ui_inst_buffer.alloc);
+		
+		vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->ui_pipeline);
+		
+		R_VULKAN_UIPushConstants push_constants = 
+		{
+			.scene = frame->scene_buffer.address,
+			.instance = frame->ui_inst_buffer.address,
+		};
+		
+		vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_UIPushConstants), &push_constants);
+		
+		vkCmdDraw(frame->cmd_buffer, 6, ui_batch->num, 0, 0);
+	}
 	// =================
 	
 	// draw meshes =====================

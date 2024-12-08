@@ -1,8 +1,10 @@
 layout(buffer_reference, std430) readonly buffer SceneData{ 
 	layout(row_major) mat4 proj;
 	layout(row_major) mat4 view;
+	vec2 screen_size;
+	float pad0[2];
 	vec3 view_pos;
-	float pad;
+	float pad1;
 	vec3 light_color;
 	float pad2;
 	vec3 light_pos;

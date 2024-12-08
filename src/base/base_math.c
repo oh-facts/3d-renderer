@@ -1,14 +1,3 @@
-typedef union V2F V2F;
-union V2F
-{
-	f32 e[2];
-	struct
-	{
-		f32 x;
-		f32 y;
-	};
-};
-
 typedef union V2S V2S;
 union V2S
 {
@@ -30,6 +19,23 @@ function b32 v2s_equals(V2S a, V2S b)
 	{
 		return 0;
 	}
+}
+
+typedef union V2F V2F;
+union V2F
+{
+	f32 e[2];
+	struct
+	{
+		f32 x;
+		f32 y;
+	};
+};
+
+function V2F v2f(f32 x, f32 y)
+{
+	V2F out = {.x = x, .y = y};
+	return out;
 }
 
 typedef union V3F V3F;
@@ -62,6 +68,12 @@ union V4F
 		f32 w;
 	};
 };
+
+function V4F v4f(f32 x, f32 y, f32 z, f32 w)
+{
+	V4F out = {.x = x, .y = y, .z = z, .w = w};
+	return out;
+}
 
 typedef struct RectF32 RectF32;
 struct RectF32

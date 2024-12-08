@@ -82,13 +82,18 @@ int main(int argc, char *argv[])
 		
 		OS_EventList list = os_pollEvents(temp.arena);
 		
-		R_Batch batch = {0};
-		batch.cap = MB(1);
-		batch.base = pushArray(temp.arena, u8, batch.cap);
+		R_Batch rect3_batch = {0};
+		rect3_batch.cap = MB(1);
+		rect3_batch.base = pushArray(temp.arena, u8, rect3_batch.cap);
+		
+		R_Batch rect2_batch = {0};
+		rect2_batch.cap = MB(1);
+		rect2_batch.base = pushArray(temp.arena, u8, rect2_batch.cap);
 		
 		static f32 counter = 0;
 		counter += delta;
 		
+#if 1
 		TEX_Scope *scope = tex_scopeOpen();
 		for(s32 i = 0; i < 1; i++)
 		{
@@ -102,12 +107,25 @@ int main(int argc, char *argv[])
 			R_Handle handle = tex_handleFromHash(scope, hashes[sprite_index]);
 			R_VULKAN_Image *image = handle.u64[0];
 			
-			r_pushRect3(&batch, model, image->index);
+			r_pushRect3(&rect3_batch, model, image->index);
 		}
+		
+		{
+			R_Handle handle = tex_handleFromHash(scope, hashes[0]);
+			R_VULKAN_Image *image = handle.u64[0];
+			
+			R_Rect2 *test_ui = r_pushRect2(&rect2_batch, rectF32(0, 0, 128, 128), v4f(1, 1, 1, 1));
+			test_ui->border_color = v4f(1, 0, 0, 1);
+			test_ui->radius = 4;
+			test_ui->border_thickness = 4;
+			test_ui->tex_id = image->index;
+		}
+		
 		tex_scopeClose(scope);
+#endif
 		
 		//r_vulkan_beginRendering();
-		r_vulkan_render(win, &list, &batch, delta, temp.arena);
+		r_vulkan_render(win, &list, &rect3_batch, &rect2_batch, delta, temp.arena);
 		r_vulkan_endRendering(win);
 		
 		//os_eventListPrint(&list);

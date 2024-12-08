@@ -32,13 +32,12 @@ struct R_Rect2
 };
 
 layout(buffer_reference, std430) readonly buffer InstanceData{ 
-	vec4 screen_size;
-	mat4 proj;
 	layout(row_major) R_Rect2 rects[];
 };
 
 layout( push_constant ) uniform constants
 {
+	SceneData scene_data;
 	InstanceData instance;
 } PC;
 
@@ -57,10 +56,13 @@ void main()
 	
 	vec2 base_uv[] = 
 	{
-		{0, 1},
-		{1, 1},
-		{1, 0},
 		{0, 0},
+		{1, 0},
+		{0, 1},
+		
+		{0, 1},
+		{1, 0},
+		{1, 1},
 	};
 	
 	a_norm_uv = base_uv[gl_VertexIndex];
@@ -69,8 +71,11 @@ void main()
 	{
 		{{ obj.dst.tl.x, obj.dst.tl.y}, {obj.src.tl.x, obj.src.br.y}, obj.fade[Corner_00]},
 		{{ obj.dst.br.x, obj.dst.tl.y}, {obj.src.br.x, obj.src.br.y}, obj.fade[Corner_10]},
-		{{ obj.dst.br.x, obj.dst.br.y}, {obj.src.br.x, obj.src.tl.y}, obj.fade[Corner_11]},
 		{{ obj.dst.tl.x, obj.dst.br.y}, {obj.src.tl.x, obj.src.tl.y}, obj.fade[Corner_01]},
+		
+		{{ obj.dst.tl.x, obj.dst.br.y}, {obj.src.tl.x, obj.src.tl.y}, obj.fade[Corner_01]},
+		{{ obj.dst.br.x, obj.dst.tl.y}, {obj.src.br.x, obj.src.br.y}, obj.fade[Corner_10]},
+		{{ obj.dst.br.x, obj.dst.br.y}, {obj.src.br.x, obj.src.tl.y}, obj.fade[Corner_11]},
 	};
 	
 	a_half_size = vec2((obj.dst.br.x - obj.dst.tl.x) * 0.5, (obj.dst.br.y - obj.dst.tl.y) * 0.5);
@@ -83,7 +88,6 @@ void main()
 	a_border_thickness = obj.border_thickness;
 	a_radius = obj.radius;
 	a_uv = vertex.uv;
-	vec2 norm_pos = vertex.pos / PC.instance.screen_size.xy * 2.0 - 1.0;
-	norm_pos.y =  - norm_pos.y;
-	gl_Position = vec4(norm_pos, 0.5, 1.0) * PC.instance.proj;
+	vec2 norm_pos = vertex.pos / PC.scene_data.screen_size.xy * 2.0 - 1.0;
+	gl_Position = vec4(norm_pos, 0.5, 1.0);
 }

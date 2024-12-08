@@ -227,6 +227,11 @@ function OS_Handle os_openWindow(char * title, f32 x, f32 y, f32 w, f32 h)
 	return out;
 }
 
+function V2S os_getWindowSize(OS_Handle handle)
+{
+	return os_state->win[0].size;
+}
+
 function void os_setCursorMode(OS_CursorMode mode)
 {
 	if(mode == OS_CursorMode_Disabled)
@@ -247,11 +252,6 @@ function V2F os_getCursorPos()
 	
 	V2F out = {x, y};
 	return out;
-}
-
-function V2S os_getWindowSize(OS_Handle handle)
-{
-	return os_state->win[0].size;
 }
 
 function s32 os_vulkan_getPlatformExtentions(char *extentions[])
