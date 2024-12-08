@@ -1,4 +1,76 @@
-#include <base/base_context.c>
+#include <stdint.h>
+#define STB_SPRINTF_IMPLEMENTATION
+#include <stb/stb_sprintf.c>
+
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_PNG
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.c>
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb/stb_truetype.c>
+
+#define CGLTF_IMPLEMENTATION
+#include <cgltf/cgltf.c>
+
+#include <stdio.h>
+#include <math.h>
+
+#include <base/base_core.c>
+#include <os/os_core.c>
+#include <base/base_arena.c>
+#include <base/base_math.c>
+#include <base/base_string.c>
+#include <base/base_file.c>
+#include <os/os_gfx.c>
+
+#undef function
+#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
+#define function static
+#include <os/os_vulkan.c>
+
+#if defined(OS_WIN32)
+#undef function
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#define function static
+#include <os/os_win32.c>
+#elif defined(OS_LINUX)
+#undef function
+#include <sys/mman.h>
+#include <unistd.h>
+#include <errno.h>
+#include <dlfcn.h>
+#include <time.h>
+#define function static
+#include <os/os_unix.c>
+#elif defined(OS_APPLE)
+#undef function
+#include <sys/mman.h>
+#include <unistd.h>
+#include <errno.h>
+#include <dlfcn.h>
+#include <time.h>
+#define function static
+#include <os/os_unix.c>
+#else
+#error platform not supported
+#endif
+
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#include <os/os_glfw.c>
+
+#include <render/render_core.c>
+#include <render/render_vulkan.c>
+
+#define HAVE_SSE2
+#include <blake2/blake2.h>
+#include <blake2/blake2b.c>
+
+#include <texture/texture_cache.c>
 
 int main(int argc, char *argv[])
 {

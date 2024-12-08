@@ -21,6 +21,6 @@ if "%shader%"=="1" (
     echo compiled shaders
 )
 
-if "%ext%" == "1" cl %build_type% /I lib\ /I %VULKAN_SDK%\Include\ /I %VULKAN_SDK%\Include\vma -c lib\vma\vma_impl.cpp /Fo:out\vma.obj /Fd:out\vma.pdb && echo "compiled vma"
+if "%vma%" == "1" cl %build_type% /I lib\ /I %VULKAN_SDK%\Include\ /I %VULKAN_SDK%\Include\vma -c lib\vma\vma_impl.cpp /Fo:out\vma.obj /Fd:out\vma.pdb && echo "compiled vma"
 
-if "%yk%" == "1" cl /wd4477 /wd4047 /wd4005 /wd4113 /wd4133 /TC /d2cgsummary /Zi /FC %build_type% /I lib\ /I %VULKAN_SDK%\Include\ /I %VULKAN_SDK%\Include\vma /I src\ -c ./src/ladybird/main.c /Fo:out\yk.obj /Fd:out\yk.pdb && echo "compiled yk" && link out\yk.obj out\vma.obj /OUT:out\yk.exe /DEBUG user32.lib kernel32.lib gdi32.lib shell32.lib lib\GLFW\glfw3.lib && echo "linked yk"
+if "%ladybird%" == "1" cl /wd4477 /wd4047 /wd4005 /wd4113 /wd4133 /TC /d2cgsummary /Zi /FC %build_type% /I lib\ /I %VULKAN_SDK%\Include\ /I %VULKAN_SDK%\Include\vma /I src\ -c ./src/ladybird/main.c /Fo:out\ladybird.obj /Fd:out\ladybird.pdb && echo "compiled ladybird" && link out\ladybird.obj out\vma.obj /OUT:out\ladybird.exe /DEBUG user32.lib kernel32.lib gdi32.lib shell32.lib lib\GLFW\glfw3.lib && echo "linked ladybird"
