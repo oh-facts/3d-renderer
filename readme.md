@@ -77,3 +77,13 @@ call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliar
 ```
 
 This should do it. You need the x64 developer tools terminal. Powershell won't work unless you've set it up / know what you're doing.
+
+### Project Structure
+
+All source code is inside `src/`
+- `base/`: common utility functions. Arenas, basic types, file handling - bitmaps, file descriptors, font loading,  math functions and string abstraction
+- `ladybird/`: 3d renderer testbed
+- `os/` : os abstraction. win32, glfw and unix.
+- `render/` : renderer layer. Used to draw rect2d, rect3d and meshes. Currently only supports a vulkan 1.2 backend
+- `shaders/` : glsl shaders, used by the vulkan renderer backend
+- `texture/` : texture cache
