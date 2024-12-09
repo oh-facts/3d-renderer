@@ -2,14 +2,25 @@
 <h1 align="center">Ladybird</h2>
 <p align="center">3D Vulkan Renderer</p>
 <p align="center">
-<img width="400"src="res/ladybird/ladybird.png">
+<img width="300"src="res/ladybird/ladybird.png">
 </p>
 </p>
 
 Vulkan research renderer. I am exploring bindless rendering, asset streaming, gltf materials and global illumination. End goal is to learn more about modern gpus and gfx programming. I might make a game with it for fun.
 
-![](res/ladybird/demo2.png)
-![](res/ladybird/demo.png)
+
+<p>
+<h1 align="center">Screenshots</h2>
+<p align="center">
+<img width="400"src="res/ladybird/demo2.png">
+<img width="400"src="res/ladybird/demo.png">
+</p>
+</p>
+
+## 3d renderer demo
+- Entry point inside `src/ladybird/`
+- `wasd` to move, mouse to look
+- `esc` to toggle control
 
 ## Compile
 
@@ -32,6 +43,8 @@ Mac build and vulkan support has been authored by @gruelingpine185
 - C99 and C++17 compiler
 
 - git-lfs (for storing resources)
+
+Dependencies not listed here are shipped with the project in `lib`
 
 ```
 git clone https://github.com/oh-facts/3d-renderer.git
@@ -63,11 +76,9 @@ The following args are also supported:  `debug` , `release`, `clean`, `clang`, `
 build vma shader ladybird
 ```
 
-This will compile the external libraries, the shaders and the renderer with clang in debug mode.
+This will compile vma, the shaders and the renderer demo with msvc in debug mode.
 
 The following args are also supported: `debug` , `release`, `clean`
-
-Only msvc is supported because it is better.
 
 Remember to have your Vulkan SDK path variable set.
 Make sure you have your msvc build environment set up.
@@ -78,12 +89,19 @@ call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliar
 
 This should do it. You need the x64 developer tools terminal. Powershell won't work unless you've set it up / know what you're doing.
 
+### Contributions
+Open Issue. Discuss Issue. Open PR. Follow `style.md`
+
 ### Project Structure
 
 All source code is inside `src/`
-- `base/`: common utility functions. Arenas, basic types, file handling - bitmaps, file descriptors, font loading,  math functions and string abstraction
+- `base/`: common utility functions. Arenas, basic types, file handling - bitmaps, file descriptors, font / gltf loading, math functions and string abstraction
 - `ladybird/`: 3d renderer testbed
 - `os/` : os abstraction. win32, glfw and unix.
 - `render/` : renderer layer. Used to draw rect2d, rect3d and meshes. Currently only supports a vulkan 1.2 backend
 - `shaders/` : glsl shaders, used by the vulkan renderer backend
 - `texture/` : texture cache
+
+Third party libraries inside `lib/`
+- `blake2`: For hashing when requirements demand for unique hashes
+- `cgltf`: gltf parser

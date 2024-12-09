@@ -1293,9 +1293,7 @@ function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
 		u64 vertices_size = sizeof(GLTF_Vertex) * gltf_mesh->num_vertices;
 		u64 indices_size = sizeof(u32) * gltf_mesh->num_indices;
 		
-		vk_mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-																							VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-																							VMA_MEMORY_USAGE_GPU_ONLY);
+		vk_mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 		
 		VkBufferDeviceAddressInfo device_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1304,12 +1302,9 @@ function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
 		
 		vk_mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 		
-		vk_mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-																							VMA_MEMORY_USAGE_GPU_ONLY);
+		vk_mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT |  VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 		
-		R_VULKAN_Buffer staging =
-			r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-														VMA_MEMORY_USAGE_CPU_TO_GPU);
+		R_VULKAN_Buffer staging = r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		
 		void *data = 0;
 		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
@@ -2050,10 +2045,7 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 			.pBindings = descriptor_bindings,
 		};
 		
-		res = vkCreateDescriptorSetLayout(r_vulkan_state->device,
-																			&descriptor_layout_info,
-																			0,
-																			&r_vulkan_state->descriptor_set_layout);
+		res = vkCreateDescriptorSetLayout(r_vulkan_state->device, &descriptor_layout_info, 0, &r_vulkan_state->descriptor_set_layout);
 		r_vulkanAssert(res);
 		
 		VkPushConstantRange range = {
@@ -2325,9 +2317,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 	}
 }
 
-function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch,
-															R_Batch *ui_batch,
-															f32 delta, Arena *scratch)
+function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, R_Batch *ui_batch, f32 delta, Arena *scratch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -2336,8 +2326,7 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	r_vulkanAssert(res);
 	
 	u32 image_index = -1;
-	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready,
-															0, &image_index);
+	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready, 0, &image_index);
 	
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) 
 	{

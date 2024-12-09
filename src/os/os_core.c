@@ -23,5 +23,3 @@ function u64 os_getPerfFreq();
 // dll
 function OS_Handle os_loadLibrary(char *name);
 function void *os_loadFunction(OS_Handle handle, char *name);
-
-// file
