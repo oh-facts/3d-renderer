@@ -306,6 +306,12 @@ function void tex_evict()
 	}
 }
 
+// todo: checker texture. perhaps render core owns it?
+// I want to remove the assert since this is the only meaningful
+// assert. rest are for show. and vulkan is ploopy.
+// and move camera code to ladybird
+global TEX_Node *tex_null_node;
+
 function R_Handle tex_handleFromHash(TEX_Scope *scope, u128 hash)
 {
 	R_Handle out = {0};

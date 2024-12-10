@@ -103,26 +103,11 @@ typedef int32_t b32;
 
 #if defined OS_WIN32
 #define export_function __declspec(dllexport)
+#pragma comment (lib, "kernel32")
+#pragma comment (lib, "user32")
+#pragma comment (lib, "gdi32")
+#pragma comment (lib, "shell32")
 #else
 #define export_function __attribute__((visibility("default")))
 #endif
 
-#if defined(OS_WIN32)
-#define _CRT_SECURE_NO_WARNINGS
-
-// unused function
-#pragma warning(disable: 4505)
-
-// nameless structs
-#pragma warning(disable: 4201)
-
-// loss of data
-#pragma warning(disable: 4244)
-
-// i dont remember
-
-#pragma warning(disable: 4576)
-#pragma warning(disable: 4456)
-#pragma warning(disable: 4305)
-#pragma warning(disable: 4018)
-#endif
