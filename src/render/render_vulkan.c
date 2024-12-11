@@ -19,159 +19,90 @@
 
 // I am thinking of a system like this - All meshes, models, resources, etc. that are loaded are owned by the engine. A handle is returned to refer to them. "Loading" means storing on the gpu since I can't think of good reason to have it around in ram. Anyways, when rendering, you'd do something like draw_mesh(mesh handle, material handle) and then the backend would map the handle to whatever mesh is being requested to draw, and it would add it to render context that is generated per frame. Maybe for streaming what I could try is that if the handle doesn't exist, it makes it exist and if a handle isn't requested for long enough, it unloads the resource? I did something similar (identical) to this in my 2d opengl engine. Only a texture cache had purpose there since there was no need for vertex or index buffers. One glaring difference was the state didn't own resources. The texture cache owned and flushed resources. So in the vulkan engine, I would ideally see what all textures are being requested by the cache and the descriptor write them. This is just an idea btw. I will cross this bridge when I get there. I am just dumping ideas. Also, word wrap is objectively superior. I fit 4 panels on my 15 inch laptop screen. 80 col limit is bs. For anyone reading this, word wrap is better because regardless of screen size, things will always fit cleanly.
 
+// instance
+global PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+global PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion;
+global PFN_vkCreateInstance vkCreateInstance;
+global PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
+global PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
+
+// device
+global PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
+global PFN_vkCreateDevice vkCreateDevice;
+global PFN_vkDeviceWaitIdle vkDeviceWaitIdle;
+
+// queue
+global PFN_vkGetDeviceQueue vkGetDeviceQueue;
+global PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2;
+
+// surface / swapchain / image / views
+global PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
+global PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
+
+global PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR;
+global PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
+
+global PFN_vkCreateImageView vkCreateImageView;
+global PFN_vkCreateImage vkCreateImage;
+global PFN_vkCreateSampler vkCreateSampler;
+
+global PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
+
+global PFN_vkDestroySampler vkDestroySampler;
+global PFN_vkDestroyImageView vkDestroyImageView;
+global PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
+
+// shaders / pipelines
+global PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout;
+global PFN_vkCreateDescriptorPool vkCreateDescriptorPool;
+global PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets;
+global PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets;
+
+global PFN_vkCreateShaderModule vkCreateShaderModule;
+global PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
+global PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
+
+// command buffers
+global PFN_vkCreateCommandPool vkCreateCommandPool;
+global PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
+global PFN_vkResetCommandBuffer vkResetCommandBuffer;
+
+// sync
+global PFN_vkCreateSemaphore vkCreateSemaphore;
+global PFN_vkCreateFence vkCreateFence;
+global PFN_vkWaitForFences vkWaitForFences;
+global PFN_vkResetFences vkResetFences;
+
+// commands
+global PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
+global PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
+global PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
+global PFN_vkEndCommandBuffer vkEndCommandBuffer;
+global PFN_vkCmdPushConstants vkCmdPushConstants;
+global PFN_vkCmdBindPipeline vkCmdBindPipeline;
+global PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer;
+global PFN_vkCmdSetViewport vkCmdSetViewport;
+global PFN_vkCmdSetScissor vkCmdSetScissor;
+global PFN_vkCmdDraw vkCmdDraw;
+global PFN_vkCmdDrawIndexed vkCmdDrawIndexed;
+global PFN_vkCmdBlitImage2KHR vkCmdBlitImage2KHR;
+global PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR;
+global PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
+global PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
+global PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
+global PFN_vkGetBufferDeviceAddress vkGetBufferDeviceAddress;
+
+// submit
+global PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
+
+// present
+global PFN_vkQueuePresentKHR vkQueuePresentKHR;
+
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
 #define R_VULKAN_FRAMES 3
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_beta.h>
-
-#define CAMERA_UP ((V3F){{0, -1, 0}})
-#define CAMERA_FRONT ((V3F){{0, 0, -1}})
-
-typedef struct Camera Camera;
-struct Camera
-{ 
-	V3F pos;	
-	V3F mv;
-	f32 pitch;
-	f32 yaw;
-	V2F old_mpos;
-	b32 enable;
-	f32 speed;
-};
-
-function void camUpdate(Camera *camera, OS_EventList *list, f32 delta)
-{
-	if(os_event(list, OS_Key_SPACE, OS_EventKind_Pressed))
-	{
-		if(camera->enable)
-		{
-			os_setCursorMode(OS_CursorMode_Normal);
-		}
-		else
-		{
-			os_setCursorMode(OS_CursorMode_Disabled);
-		}
-		
-		camera->enable = !camera->enable;
-		camera->mv = (V3F){0};
-		os_event(list, OS_Key_SPACE, OS_EventKind_Released);
-	}
-	
-	if(camera->enable)
-	{
-		if(os_event(list, OS_Key_W, OS_EventKind_Pressed))
-		{
-			camera->mv.z += -1;
-		}
-		else if(os_event(list, OS_Key_W, OS_EventKind_Released))
-		{
-			camera->mv.z -= -1;
-		}
-		
-		if(os_event(list, OS_Key_A, OS_EventKind_Pressed))
-		{
-			camera->mv.x += 1;
-		}
-		else if(os_event(list, OS_Key_A, OS_EventKind_Released))
-		{
-			camera->mv.x -= 1;
-		}
-		
-		if(os_event(list, OS_Key_D, OS_EventKind_Pressed))
-		{
-			camera->mv.x += -1;
-		}
-		else if(os_event(list, OS_Key_D, OS_EventKind_Released))
-		{
-			camera->mv.x -= -1;
-		}
-		
-		if(os_event(list, OS_Key_S, OS_EventKind_Pressed))
-		{
-			camera->mv.z += 1;
-		}
-		else if(os_event(list, OS_Key_S, OS_EventKind_Released))
-		{
-			camera->mv.z -= 1;
-		}
-		
-		if(os_event(list, OS_Key_LSHIFT, OS_EventKind_Pressed))
-		{
-			camera->mv.y += 1;
-		}
-		else if(os_event(list, OS_Key_LSHIFT, OS_EventKind_Released))
-		{
-			camera->mv.y -= 1;
-		}
-		
-		V3F dir = {0};
-		dir.x = cos(degToRad(camera->yaw)) * cos(degToRad(camera->pitch)) * 0.001;
-		dir.y = sin(degToRad(camera->pitch)) * 0.001;
-		dir.z = sin(degToRad(camera->yaw)) * cos(degToRad(camera->pitch)) * 0.001;
-		dir = v3f_normalize(dir);
-		
-		if(camera->mv.z > 0)
-		{
-			V3F vel = dir;
-			vel.x *= delta;
-			vel.y *= delta;
-			vel.z *= delta;
-			
-			camera->pos = v3f_sub(camera->pos, vel);
-		}
-		else if(camera->mv.z < 0)
-		{
-			V3F vel = dir;
-			vel.x *= delta * camera->speed;
-			vel.y *= delta * camera->speed;
-			vel.z *= delta * camera->speed;
-			
-			camera->pos = v3f_add(camera->pos, vel);
-		}
-		
-		V3F up = v3f(0.0f, 1.0f, 0.0f); 
-		V3F cameraRight = v3f_normalize(v3f_cross(up, dir));
-		V3F cameraUp = v3f_cross(dir, cameraRight);
-		V3F vel = v3f_normalize(v3f_cross(dir, cameraUp));
-		vel.x *= delta;
-		vel.y *= delta;
-		vel.z *= delta;
-		
-		if(camera->mv.x > 0)
-		{
-			camera->pos = v3f_sub(camera->pos, vel);
-		}
-		else if(camera->mv.x < 0)
-		{
-			camera->pos = v3f_add(camera->pos, vel);
-		}
-		
-		
-		OS_Event *mpos = os_event(list, OS_Key_NULL, OS_EventKind_MouseMove);
-		if(mpos)
-		{
-			camera->yaw += mpos->mpos.x - camera->old_mpos.x;
-			camera->pitch += camera->old_mpos.y - mpos->mpos.y;
-			camera->old_mpos = mpos->mpos;
-		}
-	}
-	else
-	{
-		camera->old_mpos = os_getCursorPos();
-	}
-}
-
-function M4F camGetView(Camera *camera)
-{
-	V3F dir = {0};
-	dir.x = cos(degToRad(camera->yaw)) * cos(degToRad(camera->pitch)) * 0.001;
-	dir.y = sin(degToRad(camera->pitch)) * 0.001;
-	dir.z = sin(degToRad(camera->yaw)) * cos(degToRad(camera->pitch)) * 0.001;
-	dir = v3f_normalize(dir);
-	
-	return m4f_lookAt(camera->pos, v3f_add(camera->pos, dir), CAMERA_UP);
-}
 
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
@@ -223,56 +154,6 @@ struct R_VULKAN_Buffer
 	VmaAllocation alloc;
 	VmaAllocationInfo info;
 };
-
-typedef struct GLTF_Vertex GLTF_Vertex;
-struct GLTF_Vertex
-{
-	V3F pos;
-	f32 uv_x;
-	V3F normal;
-	f32 uv_y;
-	V4F color;
-	V3F tangent;
-	float pad;
-};
-
-typedef struct GLTF_Primitive GLTF_Primitive;
-struct GLTF_Primitive
-{
-	u32 start;
-	u32 count;
-	
-	u32 base_tex_index;
-	u32 normal_tex_index;
-};
-
-typedef struct GLTF_Mesh GLTF_Mesh;
-struct GLTF_Mesh
-{
-	GLTF_Primitive *primitives;
-	u64 num_primitives;
-	
-	u32 *indices;
-	u32 num_indices;
-	
-	GLTF_Vertex *vertices;
-	u32 num_vertices;
-	
-	M4F transform;
-};
-
-typedef struct GLTF_Model GLTF_Model;
-struct GLTF_Model
-{
-	Str8 *textures;
-	u32 num_textures;
-	
-	GLTF_Mesh *meshes;
-	u64 num_meshes;
-};
-
-// TODO(mizu): textures go inside engine. an id is held for it
-// other fields 
 
 typedef struct R_VULKAN_Primitive R_VULKAN_Primitive;
 struct R_VULKAN_Primitive
@@ -398,293 +279,6 @@ struct R_VULKAN_State
 
 global R_VULKAN_State *r_vulkan_state;
 
-typedef struct GLTF_It GLTF_It;
-struct GLTF_It
-{
-	Arena *arena;
-	u64 mesh_index;
-	GLTF_Model *model;
-	cgltf_data *data;
-	Str8 dir;
-};
-
-function void gltf_traverse_node(GLTF_It *it, cgltf_node *node)
-{
-	if(node->mesh)
-	{
-		cgltf_mesh *node_mesh = node->mesh;
-		
-		GLTF_Mesh *mesh = it->model->meshes + it->mesh_index;
-		mesh->num_primitives = node_mesh->primitives_count;
-		mesh->primitives = pushArray(it->arena, GLTF_Primitive, mesh->num_primitives);
-		
-		size_t m_vertex_num = 0;
-		size_t m_index_num = 0;
-		
-		for(u32 i = 0; i < mesh->num_primitives; i++)
-		{
-			cgltf_primitive *node_prim = node->mesh->primitives + i;
-			cgltf_accessor *index_attrib = node_prim->indices;
-			
-			mesh->num_indices += index_attrib->count;
-		}
-		
-		for(u32 i = 0; i < mesh->num_primitives; i++)
-		{
-			cgltf_primitive *node_prim = node->mesh->primitives + i;
-			
-			for(u32 j = 0; j < node_prim->attributes_count; j++)
-			{
-				cgltf_attribute *attrib = node_prim->attributes + j;
-				
-				if(attrib->type == cgltf_attribute_type_position)
-				{
-					cgltf_accessor *vert_attrib = attrib->data;
-					mesh->num_vertices += vert_attrib->count;
-				}
-			}
-		}
-		
-		mesh->indices = pushArray(it->arena, u32, mesh->num_indices);
-		mesh->vertices = pushArray(it->arena, GLTF_Vertex, mesh->num_vertices);
-		
-		for(u32 i = 0; i < mesh->num_primitives; i++)
-		{
-			u64 init_vtx = m_vertex_num;
-			u64 init_index = m_index_num;
-			
-			cgltf_primitive *node_prim = node->mesh->primitives + i;
-			
-			GLTF_Primitive *p = mesh->primitives + i;
-			
-			if(node_prim->material->pbr_metallic_roughness.base_color_texture.texture)
-			{
-				char *base_color_tex = node_prim->material->pbr_metallic_roughness.base_color_texture.texture->image->uri;
-				
-				Str8 uri_str =  str8((u8*)base_color_tex, strlen(base_color_tex));
-				
-				for(s32 j = 0; j < it->model->num_textures; j++)
-				{
-					if(memcmp(uri_str.c, it->model->textures[j].c, uri_str.len) == 0)
-					{
-						p->base_tex_index = j;
-						break;
-					}
-					
-				}
-			}
-			
-			if(node_prim->material->normal_texture.texture)
-			{
-				char *base_normal_tex = node_prim->material->normal_texture.texture->image->uri;
-				
-				Str8 uri_str =  str8((u8*)base_normal_tex, strlen(base_normal_tex));
-				
-				for(s32 j = 0; j < it->model->num_textures; j++)
-				{
-					if(memcmp(uri_str.c, it->model->textures[j].c, uri_str.len) == 0)
-					{
-						p->normal_tex_index = j;
-						break;
-					}
-				}
-			}
-			cgltf_accessor *index_attrib = node_prim->indices;
-			
-			p->start = init_index;
-			p->count = index_attrib->count;
-			
-			// indices
-			{
-				for (u32 j = 0; j < index_attrib->count; j++)
-				{
-					size_t index = cgltf_accessor_read_index(index_attrib, j);
-					
-					mesh->indices[j + m_index_num] = index + init_vtx;
-				}
-				
-				m_index_num += index_attrib->count;
-			}
-			
-			// vertices
-			for(u32 j = 0; j < node_prim->attributes_count; j++)
-			{
-				cgltf_attribute *attrib = node_prim->attributes + j;
-				
-				if(attrib->type == cgltf_attribute_type_position)
-				{
-					cgltf_accessor *vert_attrib = attrib->data;
-					m_vertex_num += vert_attrib->count;
-					
-					for(u32 k = 0; k < vert_attrib->count; k++)
-					{
-						cgltf_accessor_read_float(vert_attrib, k, mesh->vertices[k + init_vtx].pos.e, sizeof(f32));
-					}
-				}
-				
-				if(attrib->type == cgltf_attribute_type_normal)
-				{
-					cgltf_accessor *norm_attrib = attrib->data;
-					
-					for(u32 k = 0; k < norm_attrib->count; k++)
-					{
-						cgltf_accessor_read_float(norm_attrib, k, mesh->vertices[k + init_vtx].normal.e, sizeof(f32));
-					}
-				}
-				
-				if(attrib->type == cgltf_attribute_type_color)
-				{
-					cgltf_accessor *color_attrib = attrib->data;
-					for (u32 k = 0; k < color_attrib->count; k++)
-					{
-						cgltf_accessor_read_float(color_attrib, k, mesh->vertices[k + init_vtx].color.e, sizeof(f32));
-					}
-				}
-				
-				if(attrib->type == cgltf_attribute_type_texcoord)
-				{
-					cgltf_accessor *tex_attrib = attrib->data;
-					
-					// TODO(mizu):  difference b/w attrib index 0 and 1
-					if (attrib->index == 0)
-					{
-						for(u32 k = 0; k < tex_attrib->count; k++)
-						{
-							f32 tex[2] = {0};
-							
-							cgltf_accessor_read_float(tex_attrib, k, tex, sizeof(f32));
-							mesh->vertices[k + init_vtx].uv_x = tex[0];
-							mesh->vertices[k + init_vtx].uv_y = 1 - tex[1];
-						}
-					}
-				}
-				
-				if(attrib->type == cgltf_attribute_type_tangent)
-				{
-					cgltf_accessor *tangent_attrib = attrib->data;
-					for (u32 k = 0; k < tangent_attrib->count; k++)
-					{
-						cgltf_accessor_read_float(tangent_attrib, k, mesh->vertices[k + init_vtx].tangent.e, sizeof(f32));
-					}
-				}
-			}
-			
-			
-		}
-		
-		f32 mat[16] = {0};
-		cgltf_node_transform_world(node, mat);
-		
-		for (u32 i = 0; i < 4; i++)
-		{
-			for (u32 j = 0; j < 4; j++)
-			{
-				mesh->transform.v[i][j] = mat[i * 4 + j];
-			}
-		}
-		
-		it->mesh_index++;
-	}
-	
-	for (u32 i = 0; i < node->children_count; ++i) 
-	{
-		gltf_traverse_node(it, node->children[i]);
-	}
-}
-
-function void gltf_print(GLTF_Model *model)
-{
-	for(u32 i = 0; i < model->num_meshes; i++)
-	{
-		GLTF_Mesh *mesh = model->meshes + i;
-		
-		printf("indices %u\n", i);
-		for(u32 j = 0; j < mesh->num_indices; j++)
-		{
-			printf("%u, ", mesh->indices[j]);
-		}
-		printf("\n");
-		
-		printf("verticess %u\n", i);
-		for(u32 j = 0; j < mesh->num_vertices; j++)
-		{
-			GLTF_Vertex *vert = mesh->vertices + j;
-			printf("[%f, %f, %f]", vert->pos.x, vert->pos.y, vert->pos.z);
-		}
-		printf("\n");
-		
-		for(u32 j = 0; j < mesh->num_primitives; j++)
-		{
-			GLTF_Primitive *p = mesh->primitives;
-			
-			printf("start: %u\n", p->start);
-			printf("count: %u\n", p->count);
-		}
-		
-		printf("\n");
-	}
-}
-
-function GLTF_Model gltf_load_mesh(Arena *arena, Arena *scratch, Str8 filepath)
-{
-	GLTF_Model out = {0};
-	
-	GLTF_It it = {0};
-	
-	it.dir = os_dirFromFile(scratch, filepath);
-	
-	cgltf_options options = {0};
-	cgltf_data *data = 0;
-	
-	if(cgltf_parse_file(&options, filepath.c, &data) == cgltf_result_success)
-	{
-		if(cgltf_load_buffers(&options, data, filepath.c) == cgltf_result_success)
-		{
-			// load textures
-			out.num_textures = data->textures_count;
-			out.textures = pushArray(arena, Bitmap, data->textures_count);
-			
-			for(u32 i = 0; i < data->textures_count; i++)
-			{
-				Str8 uri_str = {0};
-				uri_str.c = pushArray(arena, u8, strlen(data->textures[i].image->uri));
-				uri_str.len = strlen(data->textures[i].image->uri);
-				
-				memcpy(uri_str.c, data->textures[i].image->uri, uri_str.len);
-				
-				out.textures[i] = uri_str;
-			}
-			
-			// load meshes
-			out.num_meshes = data->meshes_count;
-			out.meshes = pushArray(arena, GLTF_Mesh, out.num_meshes);
-			
-			it.model = &out;
-			it.arena = arena;
-			it.data = data;
-			
-			for(u32 i = 0; i < data->scenes_count; i++)
-			{
-				cgltf_scene *scene = data->scenes + i;
-				
-				for(u32 j = 0; j < scene->nodes_count; j++)
-				{
-					cgltf_node *node = scene->nodes[j];
-					
-					gltf_traverse_node(&it, node);
-				}
-			}
-			
-			//gltf_print(it.model);
-			
-		}
-	}
-	
-	cgltf_free(data);
-	
-	return out;
-}
-
 typedef struct R_VULKAN_MeshPushConstants R_VULKAN_MeshPushConstants;
 struct R_VULKAN_MeshPushConstants
 {
@@ -712,84 +306,6 @@ function void r_vulkanAssertImpl(VkResult res)
 #else
 #define r_vulkanAssert(res)
 #endif
-
-// instance
-global PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
-global PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion;
-global PFN_vkCreateInstance vkCreateInstance;
-global PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
-global PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
-
-// device
-global PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
-global PFN_vkCreateDevice vkCreateDevice;
-global PFN_vkDeviceWaitIdle vkDeviceWaitIdle;
-
-// queue
-global PFN_vkGetDeviceQueue vkGetDeviceQueue;
-global PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2;
-
-// surface / swapchain / image / views
-global PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
-global PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
-
-global PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR;
-global PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
-
-global PFN_vkCreateImageView vkCreateImageView;
-global PFN_vkCreateImage vkCreateImage;
-global PFN_vkCreateSampler vkCreateSampler;
-
-global PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
-
-global PFN_vkDestroySampler vkDestroySampler;
-global PFN_vkDestroyImageView vkDestroyImageView;
-global PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
-
-// shaders / pipelines
-global PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout;
-global PFN_vkCreateDescriptorPool vkCreateDescriptorPool;
-global PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets;
-global PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets;
-
-global PFN_vkCreateShaderModule vkCreateShaderModule;
-global PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
-global PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
-
-// command buffers
-global PFN_vkCreateCommandPool vkCreateCommandPool;
-global PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
-global PFN_vkResetCommandBuffer vkResetCommandBuffer;
-
-// sync
-global PFN_vkCreateSemaphore vkCreateSemaphore;
-global PFN_vkCreateFence vkCreateFence;
-global PFN_vkWaitForFences vkWaitForFences;
-global PFN_vkResetFences vkResetFences;
-
-// commands
-global PFN_vkCmdBeginRenderingKHR vkCmdBeginRenderingKHR;
-global PFN_vkCmdEndRenderingKHR vkCmdEndRenderingKHR;
-global PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
-global PFN_vkEndCommandBuffer vkEndCommandBuffer;
-global PFN_vkCmdPushConstants vkCmdPushConstants;
-global PFN_vkCmdBindPipeline vkCmdBindPipeline;
-global PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer;
-global PFN_vkCmdSetViewport vkCmdSetViewport;
-global PFN_vkCmdSetScissor vkCmdSetScissor;
-global PFN_vkCmdDraw vkCmdDraw;
-global PFN_vkCmdDrawIndexed vkCmdDrawIndexed;
-global PFN_vkCmdBlitImage2KHR vkCmdBlitImage2KHR;
-global PFN_vkCmdPipelineBarrier2KHR vkCmdPipelineBarrier2KHR;
-global PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
-global PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
-global PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
-global PFN_vkGetBufferDeviceAddress vkGetBufferDeviceAddress;
-// submit
-global PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
-
-// present
-global PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
 function VkPipeline r_vulkan_createPipeline(Arena *scratch, Str8 vert_path, Str8 frag_path, VkCullModeFlags cull_mode)
 {
@@ -1242,22 +758,17 @@ function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
 	
 	Str8 app_dir = os_getAppDir(scratch);
 	pushArray(scratch, u8, 1);
-	
+
 	Str8 gltf_file_path = str8_join(scratch, app_dir, path);
 	pushArray(scratch, u8, 1);
 	
-	Str8 dir = os_dirFromFile(scratch, gltf_file_path);
-	
-	GLTF_Model model = gltf_load_mesh(scratch, scratch, gltf_file_path);
+	GLTF_Model model = gltf_loadMesh(scratch, scratch, gltf_file_path);
 	out.num_textures = model.num_textures;
 	out.textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image*, model.num_textures);
 	
 	for(u32 j = 0; j < model.num_textures; j++)
 	{
-		Str8 bmp_path = str8_join(scratch, dir, model.textures[j]);
-		pushArray(scratch, u8, 1);
-		Bitmap bmp = bitmap(scratch, bmp_path);
-		out.textures[j] = r_vulkan_image(bmp);
+		out.textures[j] = r_vulkan_image(model.textures[j]);
 	}
 	
 	out.num_meshes = model.num_meshes;
@@ -2317,7 +1828,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 	}
 }
 
-function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect3_batch, R_Batch *ui_batch, f32 delta, Arena *scratch)
+function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F view_pos, R_Batch *rect3_batch, R_Batch *ui_batch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -2435,36 +1946,23 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 	vkCmdSetViewport(frame->cmd_buffer, 0, 1, &r_vulkan_state->viewport);
 	vkCmdSetScissor(frame->cmd_buffer, 0, 1, &r_vulkan_state->scissor);
 	
-	static f32 counter = 0;
-	counter += delta;
 	V2S win_size = os_getWindowSize(win);
 	V2F win_size_f = v2f(win_size.x, win_size.y);
-	
-	static Camera camera = {
-		.pos.x = 7.17,
-		.pos.y = 0.66,
-		.pos.z = -0.21,
-		.yaw = 180,
-		.pitch = 0,
-		.speed = 5
-	};
-	
-	camUpdate(&camera, events, delta);
-	
+
 	//M4F view = m4f_lookAt((V3F){.z = -3}, (V3F){.z = 0}, (V3F){.y = 1});
 	V3F light_color = v3f(1.0f, 1.0f, 1.0f);
 	V3F light_pos = v3f(5.7, 1.3, 1);
 	
 	R_VULKAN_SceneData scene_data = {
 		.proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
-		.view = camGetView(&camera),
+		.view = view_mat,
 		.screen_size = win_size_f,
 		//.view = view,
 		//.model[0] = m4f_mul(m4f_translate(v3f(-3, 0, 3)), m4f_rotate(v3f(0, 1, 0), counter)),
 		//.model = m4f_rotate(v3f(0, 1, 0), counter),
 		//.model = m4f(1)
 		//.model = m4f_translate(v3f(0, 0.2, 0))
-		.view_pos = camera.pos,
+		.view_pos = view_pos,
 		.light_color = light_color,
 		.light_pos = light_pos,
 	};
@@ -2542,6 +2040,13 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 		}
 	}
 	
+ V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
+
+ // covert to linear since our frame buffer is srgb
+ cube_color.x = pow(cube_color.x, 2.2);
+ cube_color.y = pow(cube_color.y, 2.2);
+ cube_color.z = pow(cube_color.z, 2.2);
+ 
 	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
 	{
 		R_VULKAN_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
@@ -2557,7 +2062,7 @@ function void r_vulkan_render(OS_Handle win, OS_EventList *events, R_Batch *rect
 				.v_buffer = mesh->v_buffer.address,
 				.base_tex_index = r_vulkan_state->white_texture->index,
 				.normal_tex_index = r_vulkan_state->white_texture->index,
-				.base_color = v3f(1.0f, 0.5f, 0.31f),
+				.base_color = cube_color,
 			};
 			
 			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);

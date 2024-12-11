@@ -63,6 +63,8 @@
 #include <GLFW/glfw3native.h>
 #include <os/os_glfw.c>
 
+#include <gltf/gltf_core.c>
+
 #include <render/render_core.c>
 #include <render/render_vulkan.c>
 
@@ -71,6 +73,7 @@
 #include <blake2/blake2b.c>
 
 #include <texture/texture_cache.c>
+#include <ladybird/camera.c>
 
 int main(int argc, char *argv[])
 {
@@ -147,12 +150,22 @@ int main(int argc, char *argv[])
 	
 	b32 run = 1;
 	
+ Camera camera = {
+		.pos.x = 7.17,
+		.pos.y = 0.66,
+		.pos.z = -0.21,
+		.yaw = 180,
+		.pitch = 0,
+		.speed = 5
+	};	
+
 	for(;run;)
 	{
 		f64 time_since_last = time_elapsed;
 		ArenaTemp temp = arenaTempBegin(frame);
 		
 		OS_EventList list = os_pollEvents(temp.arena);
+  cam_update(&camera, &list, delta);
 		
 		R_Batch rect3_batch = {0};
 		rect3_batch.cap = MB(1);
@@ -164,7 +177,7 @@ int main(int argc, char *argv[])
 		
 		static f32 counter = 0;
 		counter += delta;
-		
+
 #if 1
 		TEX_Scope *scope = tex_scopeOpen();
 		for(s32 i = 0; i < 1; i++)
@@ -197,7 +210,10 @@ int main(int argc, char *argv[])
 #endif
 		
 		//r_vulkan_beginRendering();
-		r_vulkan_render(win, &list, &rect3_batch, &rect2_batch, delta, temp.arena);
+
+  M4F view = cam_getView(&camera);
+  
+		r_vulkan_render(temp.arena, win, view, camera.pos, &rect3_batch, &rect2_batch);
 		r_vulkan_endRendering(win);
 		
 		//os_eventListPrint(&list);
