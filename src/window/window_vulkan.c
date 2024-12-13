@@ -1,1 +1,0 @@
-function void os_vulkan_createSurface(OS_Handle handle, VkInstance instance, VkSurfaceKHR *surface);

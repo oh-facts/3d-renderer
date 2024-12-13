@@ -19,7 +19,10 @@ function FileData readFile(Arena *arena, Arena *scratch, Str8 filepath)
 	FileData out = {0};
 	FILE *file;
 	
-	fileOpenImpl(&file, filepath.c, "rb");
+	Str8 app_dir = os_getAppDir(scratch);
+	Str8 full_path = str8_join(arena, app_dir, filepath);
+	
+	fileOpenImpl(&file, full_path.c, "rb");
 	
 	fseek(file, 0, SEEK_END);
 	
@@ -31,24 +34,6 @@ function FileData readFile(Arena *arena, Arena *scratch, Str8 filepath)
 	fread(out.bytes, sizeof(u8), out.size, file);
 	
 	fclose(file);
-	
-	return out;
-}
-
-function Str8 dirFromFile(Arena *arena)
-{
-	Str8 out = str8_cpy()
-	char *c = &buffer[len];
-	while(*(--c) != '/')
-	{
-		*c = 0;
-		--len;
-	}
-	
-	u8 *str = pushArray(arena, u8, len);
-	memcpy(str, buffer, len);
-	
-	Str8 out = str8(str, len);
 	
 	return out;
 }

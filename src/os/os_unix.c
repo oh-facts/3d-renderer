@@ -88,3 +88,20 @@ function void *os_loadFunction(OS_Handle handle, char *name)
 	void *out = dlsym(dll, name);
 	return out;
 }
+
+function OS_Handle os_vulkan_loadLibrary()
+{
+#if defined(OS_LINUX)
+    
+    OS_Handle out = os_loadLibrary("libvulkan.so.1"); 
+    
+    return out;
+    
+#elif defined(OS_APPLE)
+    
+    OS_Handle out = os_loadLibrary("/usr/local/lib/libvulkan.dylib");
+	
+    return out;
+    
+#endif
+}
