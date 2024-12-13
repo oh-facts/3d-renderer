@@ -1,9 +1,5 @@
 ## style guide
 
-This is created so I stick to something. This is biased because I created this. Open issue to discuss.
-
-### Conventions
-
 ```.c
 typedef struct NAMESPACE_StructName NAMESPACE_StructName
 struct NAMESPACE_StructName
@@ -62,14 +58,3 @@ function void foo()
 
 }
 ```
-
-### Misc
-- Don't break lines if its too long. Use linewrap.
-- NOTE(username), TODO(username) for annotations.
-- comment as appropriate.
-- No gratituous functions.
-- Prefix functions with `function`. It is a typedef for `static`.
-- don't use const.
-- Common lsps usually don't work.
-- tabs over spaces
-- don't early return

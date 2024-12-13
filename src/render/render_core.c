@@ -10,14 +10,6 @@ struct R_Handle
 	u64 u64[2];
 };
 
-typedef struct R_Rect3 R_Rect3;
-struct R_Rect3
-{
-	M4F model;
-	u32 tex_id;
-	u32 pad[3];
-};
-
 typedef struct R_Rect2 R_Rect2;
 struct R_Rect2
 {
@@ -30,6 +22,14 @@ struct R_Rect2
 	f32 border_thickness;
 	f32 radius;
 	f32 pad2[2];
+};
+
+typedef struct R_Rect3 R_Rect3;
+struct R_Rect3
+{
+	M4F model;
+	u32 tex_id;
+	u32 pad[3];
 };
 
 typedef struct R_Batch R_Batch;
