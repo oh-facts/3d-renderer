@@ -27,6 +27,7 @@
 #undef function
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_beta.h>
 #include <vk_mem_alloc.h>
 #define function static
 #include <os/os_vulkan.c>

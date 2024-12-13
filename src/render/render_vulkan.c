@@ -101,8 +101,6 @@ global PFN_vkQueuePresentKHR vkQueuePresentKHR;
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
 #define R_VULKAN_FRAMES 3
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_beta.h>
 
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData

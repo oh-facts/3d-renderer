@@ -8,7 +8,6 @@
 
 Vulkan research renderer. I am exploring bindless rendering, asset streaming, gltf materials and global illumination. End goal is to learn more about modern gpus and gfx programming. I might make a game with it for fun.
 
-
 <p>
 <h1 align="center">Screenshots</h2>
 <p align="center">
@@ -90,12 +89,13 @@ call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliar
 This should do it. You need the x64 developer tools terminal. Powershell won't work unless you've set it up / know what you're doing.
 
 ### Contributions
-Open Issue. Discuss Issue. Open PR. Follow `style.md`
+Open Issue. Discuss Issue. Open PR.
 
 ### Project Structure
 
 All source code is inside `src/`
 - `base/`: common utility functions. Arenas, basic types, file handling - bitmaps, file descriptors, font / gltf loading, math functions and string abstraction
+- `gltf/`: gltf loader.
 - `ladybird/`: 3d renderer testbed
 - `os/` : os abstraction. win32, glfw and unix.
 - `render/` : renderer layer. Used to draw rect2d, rect3d and meshes. Currently only supports a vulkan 1.2 backend
@@ -105,3 +105,8 @@ All source code is inside `src/`
 Third party libraries inside `lib/`
 - `blake2`: For hashing when requirements demand for unique hashes
 - `cgltf`: gltf parser
+- `GLFW` : cross platform windowing library 
+- `stb` : Sean Barrett's image, ttf and sprintf
+- `vma` : vulkan memory allocator
+
+Resources inside `res/`, tracked using git-lfs
