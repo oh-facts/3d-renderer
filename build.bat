@@ -21,10 +21,10 @@ echo [%build_type%]
 
 :: shader
 if "%shader%"=="1" (
-    for %%f in (src\shaders\*.vert src\shaders\*.frag) do (
-        glslc "%%f" -o "out\%%~nxf.spv"
-    )
-    echo compiled shaders
+	for %%f in (src\shaders\*.vert src\shaders\*.frag) do (
+		glslc "%%f" -o "out\%%~nxf.spv"
+	)
+	echo compiled shaders
 )
 :: =======
 

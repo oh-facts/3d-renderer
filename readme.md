@@ -11,8 +11,7 @@ Vulkan research renderer. I am exploring bindless rendering, asset streaming, gl
 <p>
 <h1 align="center">Screenshots</h2>
 <p align="center">
-<img width="400"src="res/ladybird/demo2.png">
-<img width="400"src="res/ladybird/demo.png">
+<img width="600"src="res/ladybird/demo.png">
 </p>
 </p>
 
@@ -27,11 +26,11 @@ Vulkan 1.2 is used. Dynamic rendering, BDA, Sync 2 and Descriptor indexing is al
 
 The main branch will always compile on windows, linux and mac. 
 
-`Dev` might not compile on windows / mac since I use Arch btw. However, every now and then, I boot up windows to make it compile.
+`dev` might not compile on windows / mac since I use Arch btw. However, every now and then, I boot up windows to make it compile.
 
 `hot` might only compile on my machine. Sometimes it doesn't, but I still push it. Git is "free" cloud storage
 
-Mac build and vulkan support has been authored by @gruelingpine185
+Mac compatibility has been authored by @gruelingpine185
 
 #### Dependencies
 
@@ -95,7 +94,6 @@ Open Issue. Discuss Issue. Open PR.
 
 All source code is inside `src/`
 - `base/`: common utility functions. Arenas, basic types, file handling - bitmaps, file descriptors, font / gltf loading, math functions and string abstraction
-- `gltf/`: gltf loader.
 - `ladybird/`: 3d renderer testbed
 - `os/` : os abstraction. win32, glfw and unix.
 - `render/` : renderer layer. Used to draw rect2d, rect3d and meshes. Currently only supports a vulkan 1.2 backend
