@@ -266,7 +266,7 @@ function void r_vulkanAssertImpl(VkResult res)
 #if R_VULKAN_DEBUG
 #define r_vulkanAssert(res) r_vulkanAssertImpl(res)
 #else
-#define r_vulkanAssert(res)
+#define r_vulkanAssert(res) res
 #endif
 
 function VkPipeline r_vulkan_createPipeline(Arena *scratch, Str8 vert_path, Str8 frag_path, VkCullModeFlags cull_mode)
@@ -1096,11 +1096,9 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 					 );
 		
 		char *validation_layers[] = {
-#if R_VULKAN_DEBUG
 			"VK_LAYER_KHRONOS_validation"
-#endif
 		};
-		
+
 		char *user_extentions[] = {
 			VK_KHR_SURFACE_EXTENSION_NAME,
 #if R_VULKAN_DEBUG
@@ -1147,8 +1145,13 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 #endif
 			
 			.pApplicationInfo = &app_info,
+			#if R_VULKAN_DEBUG
 			.enabledLayerCount = arrayLen(validation_layers),
 			.ppEnabledLayerNames = validation_layers,
+			#else
+			.enabledLayerCount = 0,
+			.ppEnabledLayerNames = 0,
+			#endif
 			.enabledExtensionCount = extention_num,
 			.ppEnabledExtensionNames = extentions
 		};
