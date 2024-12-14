@@ -1,15 +1,3 @@
-typedef struct GLTF_Vertex GLTF_Vertex;
-struct GLTF_Vertex
-{
-	V3F pos;
-	f32 uv_x;
-	V3F normal;
-	f32 uv_y;
-	V4F color;
-	V3F tangent;
-	float pad;
-};
-
 typedef struct GLTF_Primitive GLTF_Primitive;
 struct GLTF_Primitive
 {
@@ -25,19 +13,21 @@ struct GLTF_Mesh
 {
 	GLTF_Primitive *primitives;
 	u64 num_primitives;
-	
 	u32 *indices;
 	u32 num_indices;
 	
-	GLTF_Vertex *vertices;
+	R_Vertex *vertices;
 	u32 num_vertices;
+
+	R_Handle gpu_buffer;
 	
 	M4F transform;
 };
 
-typedef struct GLTF_Model GLTF_Model;
-struct GLTF_Model
+typedef struct GLTF_Scene GLTF_Scene;
+struct GLTF_Scene
 {
+	R_Handle *gpu_textures;
 	Bitmap *textures;
 	u32 num_textures;
 	
@@ -50,7 +40,7 @@ struct GLTF_It
 {
 	Arena *arena;
 	u64 mesh_index;
-	GLTF_Model *model;
+	GLTF_Scene *scene;
 	cgltf_data *data;
 	Str8 dir;
 };
@@ -61,7 +51,7 @@ function void gltf_traverseNode(GLTF_It *it, cgltf_node *node)
 	{
 		cgltf_mesh *node_mesh = node->mesh;
 		
-		GLTF_Mesh *mesh = it->model->meshes + it->mesh_index;
+		GLTF_Mesh *mesh = it->scene->meshes + it->mesh_index;
 		mesh->num_primitives = node_mesh->primitives_count;
 		mesh->primitives = pushArray(it->arena, GLTF_Primitive, mesh->num_primitives);
 		
@@ -93,7 +83,7 @@ function void gltf_traverseNode(GLTF_It *it, cgltf_node *node)
 		}
 		
 		mesh->indices = pushArray(it->arena, u32, mesh->num_indices);
-		mesh->vertices = pushArray(it->arena, GLTF_Vertex, mesh->num_vertices);
+		mesh->vertices = pushArray(it->arena, R_Vertex, mesh->num_vertices);
 		
 		for(u32 i = 0; i < mesh->num_primitives; i++)
 		{
@@ -217,11 +207,11 @@ function void gltf_traverseNode(GLTF_It *it, cgltf_node *node)
 	}
 }
 
-function void gltf_print(GLTF_Model *model)
+function void gltf_print(GLTF_Scene *scene)
 {
-	for(u32 i = 0; i < model->num_meshes; i++)
+	for(u32 i = 0; i < scene->num_meshes; i++)
 	{
-		GLTF_Mesh *mesh = model->meshes + i;
+		GLTF_Mesh *mesh = scene->meshes + i;
 		
 		printf("indices %u\n", i);
 		for(u32 j = 0; j < mesh->num_indices; j++)
@@ -233,7 +223,7 @@ function void gltf_print(GLTF_Model *model)
 		printf("verticess %u\n", i);
 		for(u32 j = 0; j < mesh->num_vertices; j++)
 		{
-			GLTF_Vertex *vert = mesh->vertices + j;
+			R_Vertex *vert = mesh->vertices + j;
 			printf("[%f, %f, %f]", vert->pos.x, vert->pos.y, vert->pos.z);
 		}
 		printf("\n");
@@ -250,9 +240,9 @@ function void gltf_print(GLTF_Model *model)
 	}
 }
 
-function GLTF_Model gltf_loadMesh(Arena *arena, Arena *scratch, Str8 filepath)
+function GLTF_Scene gltf_loadMesh(Arena *arena, Arena *scratch, Str8 filepath)
 {
-	GLTF_Model out = {0};
+	GLTF_Scene out = {0};
 	
 	GLTF_It it = {0};
 	
@@ -261,55 +251,91 @@ function GLTF_Model gltf_loadMesh(Arena *arena, Arena *scratch, Str8 filepath)
 	cgltf_options options = {0};
 	cgltf_data *data = 0;
 	
-	if(cgltf_parse_file(&options, filepath.c, &data) == cgltf_result_success)
+	if(cgltf_parse_file(&options, filepath.c, &data) != cgltf_result_success)
 	{
-		if(cgltf_load_buffers(&options, data, filepath.c) == cgltf_result_success)
-		{
-			Str8 dir = os_dirFromFile(scratch, filepath);
-
-			// load textures
-			out.num_textures = data->textures_count;
-			out.textures = pushArray(arena, Bitmap, data->textures_count);
-		
-			for(u32 i = 0; i < data->textures_count; i++)
-			{
-				Str8 uri_str = {0};
-				uri_str.c = pushArray(scratch, u8, strlen(data->textures[i].image->uri));
-				uri_str.len = strlen(data->textures[i].image->uri);
-				
-				memcpy(uri_str.c, data->textures[i].image->uri, uri_str.len);
-
-				Str8 texture_abs_path = str8_join(scratch, dir, uri_str);
-
-				out.textures[i] = bitmap(arena, texture_abs_path);
-			}
-			
-			// load meshes
-			out.num_meshes = data->meshes_count;
-			out.meshes = pushArray(arena, GLTF_Mesh, out.num_meshes);
-			
-			it.model = &out;
-			it.arena = arena;
-			it.data = data;
-			
-			for(u32 i = 0; i < data->scenes_count; i++)
-			{
-				cgltf_scene *scene = data->scenes + i;
-				
-				for(u32 j = 0; j < scene->nodes_count; j++)
-				{
-					cgltf_node *node = scene->nodes[j];
-					
-					gltf_traverseNode(&it, node);
-				}
-			}
-			
-			//gltf_print(it.model);
-			
-		}
+		printf("Couldnt find file\n");
+		INVALID_CODE_PATH();
 	}
 	
+	if(cgltf_load_buffers(&options, data, filepath.c) == cgltf_result_success)
+	{
+		Str8 dir = os_dirFromFile(scratch, filepath);
+
+		// load textures
+		out.num_textures = data->textures_count;
+		out.textures = pushArray(arena, Bitmap, data->textures_count);
+	
+		for(u32 i = 0; i < data->textures_count; i++)
+		{
+			Str8 uri_str = {0};
+			uri_str.c = pushArray(scratch, u8, strlen(data->textures[i].image->uri));
+			uri_str.len = strlen(data->textures[i].image->uri);
+			
+			memcpy(uri_str.c, data->textures[i].image->uri, uri_str.len);
+
+			Str8 texture_abs_path = str8_join(scratch, dir, uri_str);
+
+			out.textures[i] = bitmap(arena, texture_abs_path);
+		}
+		
+		// load meshes
+		out.num_meshes = data->meshes_count;
+		out.meshes = pushArray(arena, GLTF_Mesh, out.num_meshes);
+		
+		it.scene = &out;
+		it.arena = arena;
+		it.data = data;
+		
+		for(u32 i = 0; i < data->scenes_count; i++)
+		{
+			cgltf_scene *scene = data->scenes + i;
+			
+			for(u32 j = 0; j < scene->nodes_count; j++)
+			{
+				cgltf_node *node = scene->nodes[j];
+				
+				gltf_traverseNode(&it, node);
+			}
+		}
+		
+		//gltf_print(it.scene);
+		
+	}
+
 	cgltf_free(data);
 	
 	return out;
+}
+
+function void gltf_upload(Arena *arena, GLTF_Scene *scene)
+{
+	scene->gpu_textures = pushArray(arena, R_Handle, scene->num_textures);
+	for(u32 i = 0; i < scene->num_textures; i++)
+	{
+		scene->gpu_textures[i] = r_image(scene->textures[i]);
+	}
+
+	for(u32 i = 0; i < scene->num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = scene->meshes + i;
+		mesh->gpu_buffer = r_meshBuffer(mesh->vertices, mesh->num_vertices, mesh->indices, mesh->num_indices);
+	}
+}
+
+function void gltf_draw(R_Batch *batch, GLTF_Scene *scene)
+{
+	for(u32 i = 0; i < scene->num_meshes; i++)
+	{
+		GLTF_Mesh *mesh = scene->meshes + i;
+		r_beginMesh(batch, mesh->num_primitives, mesh->gpu_buffer);
+
+		for(u32 j = 0; j < mesh->num_primitives; j++)
+		{
+			GLTF_Primitive *primitive = mesh->primitives + j;
+			R_Handle base_tex = scene->gpu_textures[primitive->base_tex_index];
+			R_Handle normal_tex = scene->gpu_textures[primitive->normal_tex_index];
+			
+			r_pushMesh(batch, primitive->start, primitive->count, base_tex, normal_tex, mesh->transform);
+		}
+	}
 }

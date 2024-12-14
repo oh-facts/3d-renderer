@@ -153,40 +153,6 @@ struct R_VULKAN_Buffer
 	VmaAllocationInfo info;
 };
 
-typedef struct R_VULKAN_Primitive R_VULKAN_Primitive;
-struct R_VULKAN_Primitive
-{
-	u32 start;
-	u32 count;
-	
-	u32 base_tex_index;
-	u32 normal_tex_index;
-};
-
-typedef struct R_VULKAN_Mesh R_VULKAN_Mesh;
-struct R_VULKAN_Mesh
-{
-	R_VULKAN_Primitive *primitives;
-	u64 num_primitives;
-	
-	R_VULKAN_Buffer i_buffer;
-	u32 num_indices;
-	
-	R_VULKAN_Buffer v_buffer;
-	u32 num_vertices;
-	
-	M4F transform;
-};
-
-typedef struct R_VULKAN_Model R_VULKAN_Model;
-struct R_VULKAN_Model 
-{
-	R_VULKAN_Mesh *meshes;
-	u64 num_meshes;
-	R_VULKAN_Image **textures;
-	u32 num_textures;
-};
-
 typedef struct R_VULKAN_FrameData R_VULKAN_FrameData;
 struct R_VULKAN_FrameData
 {
@@ -198,9 +164,9 @@ struct R_VULKAN_FrameData
 	VkSemaphore render_finished;
 	
 	VkDescriptorSet scene_set;
-	R_VULKAN_Buffer scene_buffer;
-	R_VULKAN_Buffer ui_inst_buffer;
-	R_VULKAN_Buffer rect3_inst_buffer;
+	R_VULKAN_Buffer *scene_buffer;
+	R_VULKAN_Buffer *ui_inst_buffer;
+	R_VULKAN_Buffer *rect3_inst_buffer;
 };
 
 typedef struct R_VULKAN_State R_VULKAN_State;
@@ -270,15 +236,13 @@ struct R_VULKAN_State
 	R_VULKAN_Image *delete_queue_image;
 	
 	// test data
-	R_VULKAN_Model model;
-	R_VULKAN_Model cubes[3];
 	VkSampler sampler;
 };
 
 global R_VULKAN_State *r_vulkan_state;
 
-typedef struct R_VULKAN_MeshPushConstants R_VULKAN_MeshPushConstants;
-struct R_VULKAN_MeshPushConstants
+typedef struct R_MeshPushConstants R_MeshPushConstants;
+struct R_MeshPushConstants
 {
 	M4F model;
 	VkDeviceAddress scene_buffer;
@@ -495,9 +459,9 @@ function VkPipeline r_vulkan_createPipeline(Arena *scratch, Str8 vert_path, Str8
 	return out;
 }
 
-function R_VULKAN_Buffer r_vulkan_createBuffer(u64 size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage)
+function R_VULKAN_Buffer *r_vulkan_createBuffer(u64 size, VkBufferUsageFlags buffer_usage, VmaMemoryUsage memory_usage)
 {
-	R_VULKAN_Buffer out = {0};
+	R_VULKAN_Buffer *out = pushArray(r_vulkan_state->arena, R_VULKAN_Buffer, 1);
 	
 	VkBufferCreateInfo buffer_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -513,7 +477,7 @@ function R_VULKAN_Buffer r_vulkan_createBuffer(u64 size, VkBufferUsageFlags buff
 	vma_info.usage = memory_usage;
 	vma_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 	
-	vmaCreateBuffer(r_vulkan_state->vma, &buffer_info, &vma_info, &out.buffer, &out.alloc, &out.info);
+	vmaCreateBuffer(r_vulkan_state->vma, &buffer_info, &vma_info, &out->buffer, &out->alloc, &out->info);
 	return out;
 }
 
@@ -619,9 +583,9 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	
 	size_t data_size = (size_t)img_info.extent.width * img_info.extent.height * img_info.extent.depth * 4;
 	
-	R_VULKAN_Buffer staging = r_vulkan_createBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	R_VULKAN_Buffer *staging = r_vulkan_createBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	
-	memcpy(staging.info.pMappedData, bmp.data, bmp.w * bmp.h * 4);
+	memcpy(staging->info.pMappedData, bmp.data, bmp.w * bmp.h * 4);
 	
 	r_vulkan_imBeginSubmit();
 	
@@ -674,7 +638,7 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 		.imageExtent = img_info.extent,
 	};
 	
-	vkCmdCopyBufferToImage(r_vulkan_state->im_cmd_buffer, staging.buffer, out->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+	vkCmdCopyBufferToImage(r_vulkan_state->im_cmd_buffer, staging->buffer, out->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 	
 	{
 		VkImageMemoryBarrier2 barrier = {
@@ -714,7 +678,7 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	}
 	
 	r_vulkan_imEndSubmit();
-	r_vulkan_destroyBuffer(&staging);
+	r_vulkan_destroyBuffer(staging);
 	
 	for (u32 i = 0; i < R_VULKAN_FRAMES; i++)
 	{
@@ -742,6 +706,14 @@ function R_VULKAN_Image *r_vulkan_image(Bitmap bmp)
 	return out;
 }
 
+function R_Handle r_image(Bitmap bmp)
+{
+	R_Handle out = {0};
+	R_VULKAN_Image *image = r_vulkan_image(bmp);
+	out.u64[0] = image;
+	return out;
+}
+
 function void r_vulkan_freeImage(R_VULKAN_Image *image)
 {
 	printf("image deleted %d\n", image->index);
@@ -750,98 +722,55 @@ function void r_vulkan_freeImage(R_VULKAN_Image *image)
 	r_vulkan_state->delete_queue_image = image;
 }
 
-function R_VULKAN_Model r_vulkan_model(Str8 path, Arena *scratch)
+function R_Handle r_meshBuffer(R_Vertex *vertices, u32 num_vertices, u32 *indices, u32 num_indices)
 {
-	R_VULKAN_Model out = {0};
-	
-	Str8 app_dir = os_getAppDir(scratch);
-	pushArray(scratch, u8, 1);
+	R_Handle out = {0};
 
-	Str8 gltf_file_path = str8_join(scratch, app_dir, path);
-	pushArray(scratch, u8, 1);
+	u64 vertices_size = sizeof(R_Vertex) * num_vertices;
+	u64 indices_size = sizeof(u32) * num_indices;
 	
-	GLTF_Model model = gltf_loadMesh(scratch, scratch, gltf_file_path);
-	out.num_textures = model.num_textures;
-	out.textures = pushArray(r_vulkan_state->arena, R_VULKAN_Image*, model.num_textures);
+	R_VULKAN_Buffer *v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 	
-	for(u32 j = 0; j < model.num_textures; j++)
-	{
-		out.textures[j] = r_vulkan_image(model.textures[j]);
-	}
+	VkBufferDeviceAddressInfo device_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+		.buffer = v_buffer->buffer,
+	};
 	
-	out.num_meshes = model.num_meshes;
-	out.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, out.num_meshes);
+	v_buffer->address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 	
-	out.num_meshes = model.num_meshes;
-	out.meshes = pushArray(r_vulkan_state->arena, R_VULKAN_Mesh, out.num_meshes);
+	R_VULKAN_Buffer *i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT |  VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 	
-	for(u32 i = 0; i < model.num_meshes; i++)
-	{
-		GLTF_Mesh *gltf_mesh = model.meshes + i;
-		R_VULKAN_Mesh *vk_mesh = out.meshes + i;
-		
-		vk_mesh->num_primitives = gltf_mesh->num_primitives;
-		vk_mesh->primitives = pushArray(r_vulkan_state->arena, R_VULKAN_Primitive, vk_mesh->num_primitives);
-		
-		for(u32 j = 0; j < gltf_mesh->num_primitives; j++)
-		{
-			vk_mesh->primitives[j].start = gltf_mesh->primitives[j].start;
-			vk_mesh->primitives[j].count = gltf_mesh->primitives[j].count;
-			vk_mesh->primitives[j].base_tex_index = gltf_mesh->primitives[j].base_tex_index;
-			vk_mesh->primitives[j].normal_tex_index = gltf_mesh->primitives[j].normal_tex_index;
-		}
-		
-		vk_mesh->transform = gltf_mesh->transform;
-	}
+	R_VULKAN_Buffer *staging = r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	
-	for(u32 i = 0; i < model.num_meshes; i++)
-	{
-		GLTF_Mesh *gltf_mesh = model.meshes + i;
-		R_VULKAN_Mesh *vk_mesh = out.meshes + i;
-		
-		u64 vertices_size = sizeof(GLTF_Vertex) * gltf_mesh->num_vertices;
-		u64 indices_size = sizeof(u32) * gltf_mesh->num_indices;
-		
-		vk_mesh->v_buffer = r_vulkan_createBuffer(vertices_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-		
-		VkBufferDeviceAddressInfo device_info = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = vk_mesh->v_buffer.buffer,
-		};
-		
-		vk_mesh->v_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
-		
-		vk_mesh->i_buffer = r_vulkan_createBuffer(indices_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT |  VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-		
-		R_VULKAN_Buffer staging = r_vulkan_createBuffer(vertices_size + indices_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		
-		void *data = 0;
-		vmaMapMemory(r_vulkan_state->vma, staging.alloc, &data);
-		
-		memcpy(data, gltf_mesh->vertices, vertices_size);
-		memcpy((u8*)data + vertices_size, gltf_mesh->indices, indices_size);
-		
-		vmaUnmapMemory(r_vulkan_state->vma, staging.alloc);
-		
-		r_vulkan_imBeginSubmit();
-		
-		VkBufferCopy vert_copy = {
-			.size = vertices_size,
-		};
-		
-		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, vk_mesh->v_buffer.buffer, 1, &vert_copy);
-		
-		VkBufferCopy index_copy = {
-			.srcOffset = vertices_size,
-			.size = indices_size,
-		};
-		
-		vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging.buffer, vk_mesh->i_buffer.buffer, 1, &index_copy);
-		
-		r_vulkan_imEndSubmit();
-		r_vulkan_destroyBuffer(&staging);
-	}
+	void *data = 0;
+	vmaMapMemory(r_vulkan_state->vma, staging->alloc, &data);
 	
+	memcpy(data, vertices, vertices_size);
+	memcpy((u8*)data + vertices_size, indices, indices_size);
+	
+	vmaUnmapMemory(r_vulkan_state->vma, staging->alloc);
+	
+	r_vulkan_imBeginSubmit();
+	
+	VkBufferCopy vert_copy = {
+		.size = vertices_size,
+	};
+	
+	vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging->buffer, v_buffer->buffer, 1, &vert_copy);
+	
+	VkBufferCopy index_copy = {
+		.srcOffset = vertices_size,
+		.size = indices_size,
+	};
+	
+	vkCmdCopyBuffer(r_vulkan_state->im_cmd_buffer, staging->buffer, i_buffer->buffer, 1, &index_copy);
+	
+	r_vulkan_imEndSubmit();
+	r_vulkan_destroyBuffer(staging);
+
+	out.u64[0] = v_buffer;
+	out.u64[1] = i_buffer;
+
 	return out;
 }
 
@@ -1699,10 +1628,10 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 				frame->scene_buffer = r_vulkan_createBuffer(sizeof(R_VULKAN_SceneData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
 					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-					.buffer = frame->scene_buffer.buffer,
+					.buffer = frame->scene_buffer->buffer,
 				};
 				
-				frame->scene_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+				frame->scene_buffer->address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 				
 			}
 			
@@ -1711,10 +1640,10 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 				frame->rect3_inst_buffer = r_vulkan_createBuffer(1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
 					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-					.buffer = frame->rect3_inst_buffer.buffer,
+					.buffer = frame->rect3_inst_buffer->buffer,
 				};
 				
-				frame->rect3_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+				frame->rect3_inst_buffer->address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 			}
 			
 			// ui instance buffer
@@ -1722,10 +1651,10 @@ function void r_vulkan_init(OS_Handle win, Arena *scratch)
 				frame->ui_inst_buffer = r_vulkan_createBuffer(1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 				VkBufferDeviceAddressInfo device_info = {
 					.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-					.buffer = frame->ui_inst_buffer.buffer,
+					.buffer = frame->ui_inst_buffer->buffer,
 				};
 				
-				frame->ui_inst_buffer.address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
+				frame->ui_inst_buffer->address = vkGetBufferDeviceAddress(r_vulkan_state->device, &device_info);
 			}
 			
 		}
@@ -1826,7 +1755,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 	}
 }
 
-function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F view_pos, R_Batch *rect3_batch, R_Batch *ui_batch)
+function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F view_pos, R_Batch *rect3_batch, R_Batch *ui_batch, R_Batch *mesh_batch)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
@@ -1966,23 +1895,29 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 	};
 	
 	void* mappedData;
-	vmaMapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc, &mappedData);
+	vmaMapMemory(r_vulkan_state->vma, frame->scene_buffer->alloc, &mappedData);
 	memcpy(mappedData, &scene_data, sizeof(R_VULKAN_SceneData));
-	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer.alloc);
+	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer->alloc);
 	
 	// draw rect3 =====================
-	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc, &mappedData);
+	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc, &mappedData);
 	memcpy(mappedData, rect3_batch->base, rect3_batch->size);
-	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer.alloc);
+	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc);
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
 	
 	R_VULKAN_Rect3PushConstants push_constants = 
 	{
-		.scene = frame->scene_buffer.address,
-		.instance = frame->rect3_inst_buffer.address,
+		.scene = frame->scene_buffer->address,
+		.instance = frame->rect3_inst_buffer->address,
 	};
 	
+	// maybe I can have an init function so I can decide allocation
+	// strategy, It feels so weird making everything a ptr.
+	// some stuff like frame data can have
+	// so I am thinking if a handle is to be returned, it is heap
+	// allocated, otherwise it is stack allocated
+
 	vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
 	
 	vkCmdDraw(frame->cmd_buffer, 6, rect3_batch->num, 0, 0);
@@ -1990,16 +1925,16 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 	
 	// draw ui =====================
 	{
-		vmaMapMemory(r_vulkan_state->vma, frame->ui_inst_buffer.alloc, &mappedData);
+		vmaMapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc, &mappedData);
 		memcpy(mappedData, ui_batch->base, ui_batch->size);
-		vmaUnmapMemory(r_vulkan_state->vma, frame->ui_inst_buffer.alloc);
+		vmaUnmapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc);
 		
 		vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->ui_pipeline);
 		
 		R_VULKAN_UIPushConstants push_constants = 
 		{
-			.scene = frame->scene_buffer.address,
-			.instance = frame->ui_inst_buffer.address,
+			.scene = frame->scene_buffer->address,
+			.instance = frame->ui_inst_buffer->address,
 		};
 		
 		vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_UIPushConstants), &push_constants);
@@ -2014,29 +1949,43 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 #if 1
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
 	
-	for(u32 i = 0; i < r_vulkan_state->model.num_meshes; i++)
+	u8 *base = mesh_batch->base;
+
+	for(u32 i = 0; i < mesh_batch->num; i++)
 	{
-		R_VULKAN_Mesh *mesh = r_vulkan_state->model.meshes + i;
-		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		R_BindBuffer *bind_index = base;
+
+		R_VULKAN_Buffer *v_buffer = bind_index->mesh_buffer.u64[0];
+		R_VULKAN_Buffer *i_buffer = bind_index->mesh_buffer.u64[1];
 		
-		for(u32 j = 0; j < mesh->num_primitives; j++)
+		vkCmdBindIndexBuffer(frame->cmd_buffer, i_buffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+		
+		base += sizeof(R_BindBuffer);
+
+		for(u32 j = 0; j < bind_index->num_primitives; j++)
 		{
-			R_VULKAN_Primitive *prim = mesh->primitives + j;
-			R_VULKAN_MeshPushConstants push_constants = 
+			R_DrawIndexed *draw = base;
+			R_VULKAN_Image *base_tex = draw->base_tex.u64[0];
+			R_VULKAN_Image *normal_tex = draw->normal_tex.u64[0];
+			
+			R_MeshPushConstants push_constants = 
 			{
-				.scene_buffer = frame->scene_buffer.address,
-				.model = mesh->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
-				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->model.textures[prim->base_tex_index]->index,
-				.normal_tex_index = r_vulkan_state->model.textures[prim->normal_tex_index]->index,
+				.scene_buffer = frame->scene_buffer->address,
+				.model = draw->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
+				.v_buffer = v_buffer->address,
+				.base_tex_index = base_tex->index,
+				.normal_tex_index = normal_tex->index,
 				.base_color = v3f(1, 1, 1),
 			};
 			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
 			
-			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
+			vkCmdDrawIndexed(frame->cmd_buffer, draw->count, 1, draw->start, 0, 0);
+			base += sizeof(R_DrawIndexed);
 		}
 	}
+	#endif
+	#if 0
 	
  V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
 
@@ -2047,13 +1996,13 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
  
 	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
 	{
-		R_VULKAN_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
+		R_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
 		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		
 		for(u32 j = 0; j < mesh->num_primitives; j++)
 		{
-			R_VULKAN_Primitive *prim = mesh->primitives + j;
-			R_VULKAN_MeshPushConstants push_constants = 
+			R_Primitive *prim = mesh->primitives + j;
+			R_MeshPushConstants push_constants = 
 			{
 				.scene_buffer = frame->scene_buffer.address,
 				.model = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2))),
@@ -2063,7 +2012,7 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 				.base_color = cube_color,
 			};
 			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
 			
 			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
 		}
@@ -2073,13 +2022,13 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 	
 	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
 	{
-		R_VULKAN_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
+		R_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
 		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		
 		for(u32 j = 0; j < mesh->num_primitives; j++)
 		{
-			R_VULKAN_Primitive *prim = mesh->primitives + j;
-			R_VULKAN_MeshPushConstants push_constants = 
+			R_Primitive *prim = mesh->primitives + j;
+			R_MeshPushConstants push_constants = 
 			{
 				.scene_buffer = frame->scene_buffer.address,
 				.model = m4f_mul(m4f_translate(light_pos), m4f_scale(v3f(0.2, 0.2, 0.2))),
@@ -2089,7 +2038,7 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 				.base_color = light_color,
 			};
 			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_MeshPushConstants), &push_constants);
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
 			
 			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
 		}

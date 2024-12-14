@@ -64,8 +64,6 @@
 #include <GLFW/glfw3native.h>
 #include <os/os_glfw.c>
 
-#include <gltf/gltf_core.c>
-
 #include <render/render_core.c>
 #include <render/render_vulkan.c>
 
@@ -75,6 +73,7 @@
 
 #include <texture/texture_cache.c>
 #include <ladybird/camera.c>
+#include <ladybird/assets.c>
 
 int main(int argc, char *argv[])
 {
@@ -82,7 +81,7 @@ int main(int argc, char *argv[])
 	
 	tex_init();
 	
-	Arena *perm = arenaAlloc();
+	Arena *perm = arenaAllocSized(MB(32), GB(1));
 	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
 	
 	typedef enum Art Art;
@@ -105,7 +104,12 @@ int main(int argc, char *argv[])
 	
 	u128 hashes[Art_COUNT] = {0};
 	u128 keys[Art_COUNT] = {0};
+
+//	R_VULKAN_Model model;
+//	R_VULKAN_Model cubes[3];
 	
+	GLTF_Scene scene = {0};
+
 	Arena *frame = arenaAllocSized(MB(32), GB(1));
 	{
 		ArenaTemp temp = arenaTempBegin(frame);
@@ -114,9 +118,12 @@ int main(int argc, char *argv[])
 		
 		r_vulkan_init(win, frame);
 		
-		r_vulkan_state->model = r_vulkan_model(str8_lit("../res/sponza/Sponza.gltf"), frame);
-		
-		r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
+		Str8 scene_path = str8_join(temp.arena, app_dir, str8_lit("../res/sponza/Sponza.gltf"));
+		pushArray(temp.arena, u8, 1);
+		printf("%.*s\n", str8_varg(scene_path));
+		scene = gltf_loadMesh(perm, temp.arena, scene_path);
+
+		gltf_upload(perm, &scene);
 		
 		for(s32 i = 0; i < Art_COUNT; i++)
 		{
@@ -160,8 +167,12 @@ int main(int argc, char *argv[])
 		.speed = 5
 	};	
 
+	
+		//r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
+
+
 	for(;run;)
-	{
+ {
 		f64 time_since_last = time_elapsed;
 		ArenaTemp temp = arenaTempBegin(frame);
 		
@@ -175,6 +186,10 @@ int main(int argc, char *argv[])
 		R_Batch rect2_batch = {0};
 		rect2_batch.cap = MB(1);
 		rect2_batch.base = pushArray(temp.arena, u8, rect2_batch.cap);
+
+		R_Batch mesh_batch = {0};
+		mesh_batch.cap = MB(128);
+		mesh_batch.base = pushArray(temp.arena, u8, mesh_batch.cap);
 		
 		static f32 counter = 0;
 		counter += delta;
@@ -210,11 +225,13 @@ int main(int argc, char *argv[])
 		tex_scopeClose(scope);
 #endif
 		
+		gltf_draw(&mesh_batch, &scene);
+
 		//r_vulkan_beginRendering();
 
   M4F view = cam_getView(&camera);
   
-		r_vulkan_render(temp.arena, win, view, camera.pos, &rect3_batch, &rect2_batch);
+		r_vulkan_render(temp.arena, win, view, camera.pos, &rect3_batch, &rect2_batch, &mesh_batch);
 		r_vulkan_endRendering(win);
 		
 		//os_eventListPrint(&list);
@@ -229,9 +246,5 @@ int main(int argc, char *argv[])
 		u64 end = os_getPerfCounter();
 		time_elapsed = (end - start) / (freq * 1.f);
 		delta = time_elapsed - time_since_last;
-		
-		tex_clock_tick();
-		tex_evict();
 	}
-	printf("quit\n");
 }

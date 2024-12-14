@@ -10,14 +10,6 @@ struct R_Handle
 	u64 u64[2];
 };
 
-typedef struct R_Rect3 R_Rect3;
-struct R_Rect3
-{
-	M4F model;
-	u32 tex_id;
-	u32 pad[3];
-};
-
 typedef struct R_Rect2 R_Rect2;
 struct R_Rect2
 {
@@ -32,6 +24,56 @@ struct R_Rect2
 	f32 pad2[2];
 };
 
+typedef struct R_Rect3 R_Rect3;
+struct R_Rect3
+{
+	M4F model;
+	u32 tex_id;
+	u32 pad[3];
+};
+
+typedef struct R_Vertex R_Vertex;
+struct R_Vertex
+{
+	V3F pos;
+	f32 uv_x;
+	V3F normal;
+	f32 uv_y;
+	V4F color;
+	V3F tangent;
+	float pad;
+};
+
+// I am thinking - begin indexed call
+// end indexed call
+// For future me, I was thinking - push buffer styled rendering
+// also, not everything needs to be a ptr (speaking of buffers, etc)
+// I can either a) put identifying info inside a handle
+// b) for stuff that needs to / could be in a queue, I can use meta nodes
+// Its weird making everything a ptr.
+// First, make this stuff compile. make everything a ptr for testing purposes.
+// Then see if you can make textures work as not ptrs.
+// This is what I am thinking
+// buffer and images are created as normal stack objects
+// When you do handleFromBuffer or handleFromTexture, you received heap
+// based meta nodes
+typedef struct R_BindBuffer R_BindBuffer;
+struct R_BindBuffer
+{
+	u32 num_primitives;
+	R_Handle mesh_buffer;
+};
+
+typedef struct R_DrawIndexed R_DrawIndexed;
+struct R_DrawIndexed
+{
+	u32 start;
+	u32 count;
+	R_Handle base_tex;
+	R_Handle normal_tex;
+	M4F transform;
+};
+
 typedef struct R_Batch R_Batch;
 struct R_Batch
 {
@@ -39,12 +81,6 @@ struct R_Batch
 	u32 num;
 	u32 size;
 	u32 cap;
-};
-
-typedef struct R_State R_State;
-struct R_State
-{
-	s32 temp;
 };
 
 function R_Rect2 *r_pushRect2(R_Batch *batch, RectF32 dst, V4F color)
@@ -82,4 +118,28 @@ function R_Rect3 *r_pushRect3(R_Batch *batch, M4F model, u32 tex_id)
 	batch->size+=sizeof(R_Rect3);
 	
 	return out;
+}
+
+function void r_beginMesh(R_Batch *batch, u32 num_primitives, R_Handle mesh_buffer)
+{
+	Assert(batch->base + batch->cap > batch->size + sizeof(R_BindBuffer));
+	R_BindBuffer *bind_index = batch->base + batch->size;
+	bind_index->num_primitives = num_primitives;
+	bind_index->mesh_buffer = mesh_buffer;
+
+	batch->num+=1;
+	batch->size+= sizeof(R_BindBuffer);
+}
+
+function void r_pushMesh(R_Batch *batch, u32 start, u32 count, R_Handle base_tex, R_Handle normal_tex, M4F transform)
+{
+	Assert(batch->base + batch->cap > batch->size + sizeof(R_DrawIndexed));
+	R_DrawIndexed *draw = batch->base + batch->size;
+	draw->start = start;
+	draw->count = count;
+	draw->base_tex = base_tex;
+	draw->normal_tex = normal_tex;
+	draw->transform = transform;
+
+	batch->size+= sizeof(R_DrawIndexed);	
 }
