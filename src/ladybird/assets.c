@@ -4,6 +4,7 @@ struct GLTF_Primitive
 	u32 start;
 	u32 count;
 	
+	V3F base_color;
 	u32 base_tex_index;
 	u32 normal_tex_index;
 };
@@ -322,8 +323,16 @@ function void gltf_upload(Arena *arena, GLTF_Scene *scene)
 	}
 }
 
-function void gltf_draw(R_Batch *batch, M4F transform, GLTF_Scene *scene)
+global R_VULKAN_Image null_image;
+global R_Handle null_handle = {.u64[0] = &null_image};
+
+function void gltf_draw(R_Batch *batch, M4F transform, V3F color, GLTF_Scene *scene)
 {
+	// covert to linear since our frame buffer is srgb
+	color.x = pow(color.x, 2.2);
+	color.y = pow(color.y, 2.2);
+	color.z = pow(color.z, 2.2);
+	
 	for(u32 i = 0; i < scene->num_meshes; i++)
 	{
 		GLTF_Mesh *mesh = scene->meshes + i;
@@ -335,7 +344,15 @@ function void gltf_draw(R_Batch *batch, M4F transform, GLTF_Scene *scene)
 			R_Handle base_tex = scene->gpu_textures[primitive->base_tex_index];
 			R_Handle normal_tex = scene->gpu_textures[primitive->normal_tex_index];
 			
-			r_pushMesh(batch, primitive->start, primitive->count, base_tex, normal_tex, m4f_mul(mesh->transform, transform));
+			if(!base_tex.u64[0])
+			{
+				base_tex = null_handle;
+			}
+			if(!normal_tex.u64[0])
+			{
+				normal_tex = null_handle;
+			}
+			r_pushMesh(batch, primitive->start, primitive->count, color, base_tex, normal_tex, m4f_mul(mesh->transform, transform));
 		}
 	}
 }

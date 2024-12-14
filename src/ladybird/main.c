@@ -110,6 +110,7 @@ int main(int argc, char *argv[])
 	
 	GLTF_Scene scene = {0};
 	GLTF_Scene scene2 = {0};
+	GLTF_Scene scene3 = {0};
 
 	Arena *frame = arenaAllocSized(MB(32), GB(1));
 	{
@@ -131,6 +132,12 @@ int main(int argc, char *argv[])
 		printf("%.*s\n", str8_varg(scene2_path));
 		scene2 = gltf_loadMesh(perm, temp.arena, scene2_path);
 		gltf_upload(perm, &scene2);
+
+		Str8 scene3_path = str8_join(temp.arena, app_dir, str8_lit("../res/cube/cube.gltf"));
+		pushArray(temp.arena, u8, 1);
+		printf("%.*s\n", str8_varg(scene3_path));
+		scene3 = gltf_loadMesh(perm, temp.arena, scene3_path);
+		gltf_upload(perm, &scene3);
 				
 		for(s32 i = 0; i < Art_COUNT; i++)
 		{
@@ -173,7 +180,6 @@ int main(int argc, char *argv[])
 		.pitch = 0,
 		.speed = 5
 	};	
-
 	
 		//r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
 
@@ -200,7 +206,7 @@ int main(int argc, char *argv[])
 		static f32 counter = 0;
 		counter += delta;
 
-#if 1
+#if 0
 		TEX_Scope *scope = tex_scopeOpen();
 		for(s32 i = 0; i < 1; i++)
 		{
@@ -231,8 +237,12 @@ int main(int argc, char *argv[])
 		tex_scopeClose(scope);
 #endif
 		
-		gltf_draw(&mesh_batch, m4f(1), &scene);
-		gltf_draw(&mesh_batch, m4f(1), &scene2);
+		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene);
+		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene2);
+
+		V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
+		M4F cube_transform = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2)));
+		gltf_draw(&mesh_batch, cube_transform, cube_color, &scene3);
 
 		//r_vulkan_beginRendering();
 
@@ -254,8 +264,8 @@ int main(int argc, char *argv[])
 		time_elapsed = (end - start) / (freq * 1.f);
 		delta = time_elapsed - time_since_last;
 
-		tex_clock_tick();
-		tex_evict();
+		//tex_clock_tick();
+		//tex_evict();
 	}
 	printf("Quit");
 }

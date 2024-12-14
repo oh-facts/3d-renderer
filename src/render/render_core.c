@@ -69,6 +69,7 @@ struct R_DrawIndexed
 {
 	u32 start;
 	u32 count;
+	V3F color;
 	R_Handle base_tex;
 	R_Handle normal_tex;
 	M4F transform;
@@ -131,12 +132,13 @@ function void r_beginMesh(R_Batch *batch, u32 num_primitives, R_Handle mesh_buff
 	batch->size+= sizeof(R_BindBuffer);
 }
 
-function void r_pushMesh(R_Batch *batch, u32 start, u32 count, R_Handle base_tex, R_Handle normal_tex, M4F transform)
+function void r_pushMesh(R_Batch *batch, u32 start, u32 count, V3F color, R_Handle base_tex, R_Handle normal_tex, M4F transform)
 {
 	Assert(batch->base + batch->cap > batch->size + sizeof(R_DrawIndexed));
 	R_DrawIndexed *draw = batch->base + batch->size;
 	draw->start = start;
 	draw->count = count;
+	draw->color = color;
 	draw->base_tex = base_tex;
 	draw->normal_tex = normal_tex;
 	draw->transform = transform;

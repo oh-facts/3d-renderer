@@ -1974,11 +1974,11 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 			R_MeshPushConstants push_constants = 
 			{
 				.scene_buffer = frame->scene_buffer->address,
-				.model = draw->transform,//m4f(1),//m4f_mul(m4f_translate(v3f(-0.3, -1, 2)), m4f_mul(m4f_rotate(v3f(0, 1, 0), counter), m4f_rotate(v3f(1, 0, 0), degToRad(90)))),
+				.model = draw->transform,
 				.v_buffer = v_buffer->address,
 				.base_tex_index = base_tex->index,
 				.normal_tex_index = normal_tex->index,
-				.base_color = v3f(1, 1, 1),
+				.base_color = draw->color,
 			};
 			
 			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
@@ -1987,39 +1987,9 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 			base += sizeof(R_DrawIndexed);
 		}
 	}
-	#endif
-	#if 0
-	
- V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
+#endif
 
- // covert to linear since our frame buffer is srgb
- cube_color.x = pow(cube_color.x, 2.2);
- cube_color.y = pow(cube_color.y, 2.2);
- cube_color.z = pow(cube_color.z, 2.2);
- 
-	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
-	{
-		R_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
-		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		
-		for(u32 j = 0; j < mesh->num_primitives; j++)
-		{
-			R_Primitive *prim = mesh->primitives + j;
-			R_MeshPushConstants push_constants = 
-			{
-				.scene_buffer = frame->scene_buffer.address,
-				.model = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2))),
-				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->white_texture->index,
-				.normal_tex_index = r_vulkan_state->white_texture->index,
-				.base_color = cube_color,
-			};
-			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
-			
-			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
-		}
-	}
+#if 0
 	
 	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->light_pipeline);
 	
