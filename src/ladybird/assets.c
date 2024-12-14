@@ -322,7 +322,7 @@ function void gltf_upload(Arena *arena, GLTF_Scene *scene)
 	}
 }
 
-function void gltf_draw(R_Batch *batch, GLTF_Scene *scene)
+function void gltf_draw(R_Batch *batch, M4F transform, GLTF_Scene *scene)
 {
 	for(u32 i = 0; i < scene->num_meshes; i++)
 	{
@@ -335,7 +335,7 @@ function void gltf_draw(R_Batch *batch, GLTF_Scene *scene)
 			R_Handle base_tex = scene->gpu_textures[primitive->base_tex_index];
 			R_Handle normal_tex = scene->gpu_textures[primitive->normal_tex_index];
 			
-			r_pushMesh(batch, primitive->start, primitive->count, base_tex, normal_tex, mesh->transform);
+			r_pushMesh(batch, primitive->start, primitive->count, base_tex, normal_tex, m4f_mul(mesh->transform, transform));
 		}
 	}
 }

@@ -109,6 +109,7 @@ int main(int argc, char *argv[])
 //	R_VULKAN_Model cubes[3];
 	
 	GLTF_Scene scene = {0};
+	GLTF_Scene scene2 = {0};
 
 	Arena *frame = arenaAllocSized(MB(32), GB(1));
 	{
@@ -122,9 +123,15 @@ int main(int argc, char *argv[])
 		pushArray(temp.arena, u8, 1);
 		printf("%.*s\n", str8_varg(scene_path));
 		scene = gltf_loadMesh(perm, temp.arena, scene_path);
-
 		gltf_upload(perm, &scene);
 		
+
+		Str8 scene2_path = str8_join(temp.arena, app_dir, str8_lit("../res/asuka/scene.gltf"));
+		pushArray(temp.arena, u8, 1);
+		printf("%.*s\n", str8_varg(scene2_path));
+		scene2 = gltf_loadMesh(perm, temp.arena, scene2_path);
+		gltf_upload(perm, &scene2);
+				
 		for(s32 i = 0; i < Art_COUNT; i++)
 		{
 			Str8 bmp_path = str8_join(temp.arena, app_dir, paths[i]);
@@ -169,7 +176,6 @@ int main(int argc, char *argv[])
 
 	
 		//r_vulkan_state->cubes[0] = r_vulkan_model(str8_lit("../res/cube/cube.gltf"), frame);
-
 
 	for(;run;)
  {
@@ -225,7 +231,8 @@ int main(int argc, char *argv[])
 		tex_scopeClose(scope);
 #endif
 		
-		gltf_draw(&mesh_batch, &scene);
+		gltf_draw(&mesh_batch, m4f(1), &scene);
+		gltf_draw(&mesh_batch, m4f(1), &scene2);
 
 		//r_vulkan_beginRendering();
 
@@ -246,5 +253,9 @@ int main(int argc, char *argv[])
 		u64 end = os_getPerfCounter();
 		time_elapsed = (end - start) / (freq * 1.f);
 		delta = time_elapsed - time_since_last;
+
+		tex_clock_tick();
+		tex_evict();
 	}
+	printf("Quit");
 }
