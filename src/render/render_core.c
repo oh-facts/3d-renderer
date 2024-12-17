@@ -108,6 +108,11 @@ function R_Rect2 *r_pushRect2(R_Batch *batch, RectF32 dst, V4F color)
 	return out;
 }
 
+function void r_pushText(R_Batch *batch, Str8 text, V2F pos, V4F color, f32 scale)
+{
+	//RectF32 ex = rectFromString(text, scale);
+}
+
 function R_Rect3 *r_pushRect3(R_Batch *batch, M4F model, u32 tex_id)
 {
 	Assert(batch->base + batch->cap > batch->size + sizeof(R_Rect3));

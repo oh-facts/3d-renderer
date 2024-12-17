@@ -100,7 +100,7 @@ global PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
 // enables vulkan asserts and validation layers
 #define R_VULKAN_DEBUG 1
-#define R_VULKAN_FRAMES 3
+#define R_VULKAN_FRAMES 1
 
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
@@ -1714,7 +1714,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 {
 	r_vulkan_state->current_frame_index = (r_vulkan_state->current_frame_index + 1) % R_VULKAN_FRAMES;
 	r_vulkan_state->last_frame_window_size = os_getWindowSize(win);
-	
+	/*
 	// free textures
 	for(R_VULKAN_Image *image = r_vulkan_state->delete_queue_image, *next = 0; image; image = next)
 	{
@@ -1756,6 +1756,7 @@ function void r_vulkan_endRendering(OS_Handle win)
 		image->next = r_vulkan_state->free_image;
 		r_vulkan_state->free_image = image;
 	}
+	*/
 }
 
 function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F view_pos, R_Batch *rect3_batch, R_Batch *ui_batch, R_Batch *mesh_batch)
