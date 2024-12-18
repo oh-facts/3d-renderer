@@ -77,7 +77,7 @@ function ArenaTemp arenaTempBegin(Arena *arena)
 // TODO(mizu): Can be very expensive
 function void arenaTempEnd(ArenaTemp *temp)
 {
-	memset((u8*)temp->arena + temp->pos, 0, temp->arena->used - temp->pos);
+	//memset((u8*)temp->arena + temp->pos, 0, temp->arena->used - temp->pos);
 	
 	temp->arena->used = temp->pos;
 }

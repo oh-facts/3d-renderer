@@ -90,6 +90,7 @@ function OS_Event *os_pushEvent(Arena *arena, OS_EventList *list)
 	list->count++;
 	
 	OS_Event *out = pushArray(arena, OS_Event, 1);
+	*out = (OS_Event){0};
 	
 	if(!list->last)
 	{

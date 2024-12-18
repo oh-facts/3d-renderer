@@ -104,9 +104,6 @@ int main(int argc, char *argv[])
 	
 	u128 hashes[Art_COUNT] = {0};
 	u128 keys[Art_COUNT] = {0};
-
-//	R_VULKAN_Model model;
-//	R_VULKAN_Model cubes[3];
 	
 	GLTF_Scene scene = {0};
 	GLTF_Scene scene2 = {0};
@@ -237,12 +234,12 @@ int main(int argc, char *argv[])
 		tex_scopeClose(scope);
 #endif
 		
-		//gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene);
-		//gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene2);
+		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene);
+		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene2);
 
 		V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
 		M4F cube_transform = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2)));
-		//gltf_draw(&mesh_batch, cube_transform, cube_color, &scene3);
+		gltf_draw(&mesh_batch, cube_transform, cube_color, &scene3);
 
 		r_vulkan_beginRendering();
 
