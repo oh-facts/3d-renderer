@@ -99,6 +99,7 @@ All source code is inside `src/`
 - `render/` : renderer layer. Used to draw rect2d, rect3d and meshes. Currently only supports a vulkan 1.2 backend
 - `shaders/` : glsl shaders, used by the vulkan renderer backend
 - `texture/` : texture cache
+- `winter/`: This winter, I am going to whip out a game. It will be a demo  for a game I've been thinking about. Its a 2d puzzle story stealth action rpg. I will speedrun the development. This steam, you will see a demo.
 
 Third party libraries inside `lib/`
 - `blake2`: For hashing when requirements demand for unique hashes

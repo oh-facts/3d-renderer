@@ -39,3 +39,11 @@ set lb_lib= lib\GLFW\glfw3.lib
 if "%ladybird%" == "1" cl %build_type% %inc% %lb_flags% -c ./src/ladybird/main.c /Fo:out\ladybird.obj /Fd:out\ladybird.pdb && echo "compiled ladybird" && ^
 link out\ladybird.obj out\vma.obj /OUT:out\ladybird.exe /DEBUG %lb_lib% && echo "linked ladybird"
 :: =======
+
+:: game
+set lb_flags= /wd4477 /wd4047 /wd4005 /wd4113 /wd4133 /TC /d2cgsummary /Zi
+set lb_lib= lib\GLFW\glfw3.lib
+
+if "%winter%" == "1" cl %build_type% %inc% %lb_flags% -c ./src/winter/main.c /Fo:out\winter.obj /Fd:out\winter.pdb && echo "compiled winter" && ^
+link out\winter.obj out\vma.obj /OUT:out\winter.exe /DEBUG %lb_lib% && echo "linked winter"
+:: =======
