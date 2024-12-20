@@ -175,7 +175,18 @@ int main(int argc, char *argv[])
 		M4F view = win_cam_getView(&camera);
 
 		r_begin(frame);
-			render_tilemap(&ui_batches, camera.pos);
+			
+			// render player
+				RectF32 dst = {
+				.min.x = camera.pos.x,
+				.min.y = camera.pos.y,
+				.max.x = dst.min.x + 64,
+				.max.y = dst.min.y + 64,
+			};
+			r_pushRect2(&ui_batches, dst, COLOR_CYAN);
+
+			// render world
+			render_tilemap(&ui_batches);
 		r_end();
 
 		r_vulkan_beginRendering();

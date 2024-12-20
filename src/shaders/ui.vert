@@ -88,6 +88,6 @@ void main()
 	a_border_thickness = obj.border_thickness;
 	a_radius = obj.radius;
 	a_uv = vertex.uv;
-	vec2 norm_pos = vertex.pos / PC.scene_data.screen_size.xy * 2.0 - 1.0;
-	gl_Position = vec4(norm_pos, 0, 1);// * PC.scene_data.view * PC.scene_data.proj;
+	vec2 norm_pos = vertex.pos ;/// PC.scene_data.screen_size.xy * 2.0 - 1.0;
+	gl_Position = vec4(norm_pos, 0, 1) * PC.scene_data.view * PC.scene_data.proj;
 }

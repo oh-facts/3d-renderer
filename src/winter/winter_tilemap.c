@@ -1,6 +1,7 @@
 #define COLOR_RED (V4F){1, 0, 0, 1}
 #define COLOR_GREEN (V4F){0, 1, 0, 1}
 #define COLOR_BLUE (V4F){0, 0, 1, 1}
+#define COLOR_CYAN (V4F){0, 1, 1, 1}
 
 function V4F color_inverse(V4F color)
 {
@@ -14,7 +15,7 @@ function V4F color_inverse(V4F color)
 	return out;
 }
 
-function void render_tilemap(R_BatchList *batch_list, V3F pos)
+function void render_tilemap(R_BatchList *batch_list)
 {
 	TEX_Scope *scope = tex_scopeOpen();
 	{
@@ -32,8 +33,8 @@ function void render_tilemap(R_BatchList *batch_list, V3F pos)
 				V4F color = colors[(y + x) % 3];
 				
 				RectF32 dst = {
-					.min.x = x * 64 + pos.x,
-					.min.y = y * 64 + pos.y,
+					.min.x = x * 64,
+					.min.y = y * 64,
 					.max.x = dst.min.x + 64,
 					.max.y = dst.min.y + 64,
 				};
