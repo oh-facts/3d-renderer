@@ -38,6 +38,52 @@ function V2F v2f(f32 x, f32 y)
 	return out;
 }
 
+function f32 v2f_length(V2F v)
+{
+	return sqrt(v.x * v.x + v.y * v.y);
+}
+
+function V2F v2f_add(V2F a, V2F b)
+{
+	V2F out = {
+		.x = a.x + b.x,
+		.y = a.y + b.y,
+	};
+	
+	return out;
+}
+
+function V2F v2f_sub(V2F a, V2F b)
+{
+	V2F out = {
+		.x = a.x - b.x,
+		.y = a.y - b.y,
+	};
+	
+	return out;
+}
+
+function V2F v2f_normalize(V2F v)
+{
+	V2F out = v;
+	
+	f32 len = v2f_length(v);
+	
+	if(len != 0)
+	{
+		out.x /= len;
+		out.y /= len;
+	}
+	return out;
+}
+
+function f32 v2f_dot(V2F a, V2F b)
+{
+	f32 out = a.x * b.x + a.y * b.y;
+	
+	return out;
+}
+
 typedef union V3F V3F;
 union V3F
 {
@@ -53,6 +99,66 @@ union V3F
 function V3F v3f(f32 x, f32 y, f32 z)
 {
 	V3F out = {.x = x, .y = y, .z = z};
+	return out;
+}
+
+function f32 v3f_length(V3F v)
+{
+	return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+function V3F v3f_add(V3F a, V3F b)
+{
+	V3F out = {
+		.x = a.x + b.x,
+		.y = a.y + b.y,
+		.z = a.z + b.z,
+	};
+	
+	return out;
+}
+
+function V3F v3f_sub(V3F a, V3F b)
+{
+	V3F out = {
+		.x = a.x - b.x,
+		.y = a.y - b.y,
+		.z = a.z - b.z,
+	};
+	
+	return out;
+}
+
+function V3F v3f_normalize(V3F v)
+{
+	V3F out = v;
+	
+	f32 len = v3f_length(v);
+	
+	if(len != 0)
+	{
+		out.x /= len;
+		out.y /= len;
+		out.z /= len;
+	}
+	return out;
+}
+
+function f32 v3f_dot(V3F a, V3F b)
+{
+	f32 out = a.x * b.x + a.y * b.y + a.z * b.z;
+	
+	return out;
+}
+
+function V3F v3f_cross(V3F a, V3F b)
+{
+	V3F out = {
+		.x = a.y * b.z - a.z * b.y,
+		.y = a.z * b.x - a.x * b.z,
+		.z = a.x * b.y - a.y * b.x,
+	};
+	
 	return out;
 }
 
@@ -163,66 +269,6 @@ function M4F m4f_scale(V3F v)
 #undef near
 #undef far
 
-function f32 v3f_length(V3F v)
-{
-	return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-}
-
-function V3F v3f_add(V3F a, V3F b)
-{
-	V3F out = {
-		.x = a.x + b.x,
-		.y = a.y + b.y,
-		.z = a.z + b.z,
-	};
-	
-	return out;
-}
-
-function V3F v3f_sub(V3F a, V3F b)
-{
-	V3F out = {
-		.x = a.x - b.x,
-		.y = a.y - b.y,
-		.z = a.z - b.z,
-	};
-	
-	return out;
-}
-
-function V3F v3f_normalize(V3F v)
-{
-	V3F out = v;
-	
-	f32 len = v3f_length(v);
-	
-	if(len != 0)
-	{
-		out.x /= len;
-		out.y /= len;
-		out.z /= len;
-	}
-	return out;
-}
-
-function f32 v3f_dot(V3F a, V3F b)
-{
-	f32 out = a.x * b.x + a.y * b.y + a.z * b.z;
-	
-	return out;
-}
-
-function V3F v3f_cross(V3F a, V3F b)
-{
-	V3F out = {
-		.x = a.y * b.z - a.z * b.y,
-		.y = a.z * b.x - a.x * b.z,
-		.z = a.x * b.y - a.y * b.x,
-	};
-	
-	return out;
-}
-
 function M4F
 m4f_lookAt(V3F eye, V3F center, V3F up)
 {
@@ -321,6 +367,41 @@ function M4F m4f_mul(M4F a, M4F b)
 				a.v[3][j]*b.v[i][3]);
 		}
 	}
+	
+	return out;
+}
+
+typedef struct M4F_OrthProj M4F_OrthProj;
+struct M4F_OrthProj
+{
+	M4F fwd;
+	M4F inv;
+};
+
+function M4F_OrthProj m4f_orthoProj(f32 left,f32 right,f32 bottom, f32 top, f32 _near, f32 _far)
+{
+	f32 rpl = right + left;
+	f32 rml = right - left;
+	f32 tpb = top + bottom;
+	f32 tmb = top - bottom;
+	f32 fpn = _far + _near;
+	f32 fmn = _far - _near;
+	
+	M4F_OrthProj out;
+
+	out.fwd = (M4F){{
+			{2/rml,     0,          0,       -rpl/rml},
+			{0,         2/tmb,      0,       -tpb/tmb},
+			{0,         0,          -2/fmn,   - fpn/fmn},
+			{0, 0,  0, 1}
+		}};
+	
+	out.inv = (M4F){{
+			{rml/2,   0,       0,       rpl/2},
+			{0,       tmb/2,   0,       tpb/2},
+			{0,       0,       -fmn/2,  -fpn/2},
+			{0,   0,   0,   1}
+		}};
 	
 	return out;
 }

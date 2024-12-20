@@ -78,7 +78,7 @@
 int main(int argc, char *argv[])
 {
 	os_init();
-	
+	r_init();
 	tex_init();
 	
 	Arena *perm = arenaAllocSized(MB(32), GB(1));
@@ -188,18 +188,10 @@ int main(int argc, char *argv[])
 		OS_EventList list = os_pollEvents(temp.arena);
   cam_update(&camera, &list, delta);
 		
-		R_Batch rect3_batch = {0};
-		rect3_batch.cap = MB(1);
-		rect3_batch.base = pushArray(temp.arena, u8, rect3_batch.cap);
-		
-		R_Batch rect2_batch = {0};
-		rect2_batch.cap = MB(1);
-		rect2_batch.base = pushArray(temp.arena, u8, rect2_batch.cap);
+		R_BatchList ui_batches = {0};
+		R_BatchList mesh_batches = {0};
+		R_BatchList rect3_batches = {0};
 
-		R_Batch mesh_batch = {0};
-		mesh_batch.cap = MB(128);
-		mesh_batch.base = pushArray(temp.arena, u8, mesh_batch.cap);
-		
 		static f32 counter = 0;
 		counter += delta;
 
@@ -233,16 +225,18 @@ int main(int argc, char *argv[])
 		
 		tex_scopeClose(scope);
 #endif
+
+		r_begin(frame);
 		
-		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene);
-		gltf_draw(&mesh_batch, m4f(1), v3f(1, 1, 1), &scene2);
+		gltf_draw(&mesh_batches, m4f(1), v3f(1, 1, 1), &scene);
+		gltf_draw(&mesh_batches, m4f(1), v3f(1, 1, 1), &scene2);
 
 		V3F cube_color = v3f(1.0f, 0.5f, 0.31f);
 		M4F cube_transform = m4f_mul(m4f_translate(v3f(5, 1, -1)), m4f_scale(v3f(0.2, 0.2, 0.2)));
 		gltf_draw(&mesh_batch, cube_transform, cube_color, &scene3);
 
 		r_vulkan_beginRendering();
-
+		
   M4F view = cam_getView(&camera);
   
 		r_vulkan_render(temp.arena, win, view, camera.pos, &rect3_batch, &rect2_batch, &mesh_batch);

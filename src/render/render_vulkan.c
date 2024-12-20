@@ -99,8 +99,8 @@ global PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
 global PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
 // enables vulkan asserts and validation layers
-#define R_VULKAN_DEBUG 1
-#define R_VULKAN_FRAMES 3
+#define R_VULKAN_DEBUG 0
+#define R_VULKAN_FRAMES 1
 
 typedef struct R_VULKAN_SceneData R_VULKAN_SceneData;
 struct R_VULKAN_SceneData
@@ -1758,16 +1758,20 @@ function void r_vulkan_endRendering(OS_Handle win)
 	}
 }
 
-function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F view_pos, R_Batch *rect3_batch, R_Batch *ui_batch, R_Batch *mesh_batch)
+function void r_vulkan_render(Arena *scratch, OS_Handle win, R_BatchList *ui_batches, R_BatchList *rect3_batches, R_BatchList *mesh_batches, M4F proj, M4F view, V3F view_pos)
 {
 	//printf("%f %f\n", r_vulkan_state->viewport.width, r_vulkan_state->viewport.height);
 	R_VULKAN_FrameData *frame = r_vulkan_getCurrentFrame();
+
+	//printf("frame: %d\n", r_vulkan_state->current_frame_index);
 	
 	VkResult res = vkWaitForFences(r_vulkan_state->device, 1, &frame->fence, VK_TRUE, UINT64_MAX);
 	r_vulkanAssert(res);
 	
-	u32 image_index = -1;
+	u32 image_index;
 	res = vkAcquireNextImageKHR(r_vulkan_state->device, r_vulkan_state->swapchain, UINT64_MAX, frame->image_ready, 0, &image_index);
+
+	//printf("%d\n", image_index);
 	
 	if((res == VK_ERROR_OUT_OF_DATE_KHR) || (res == VK_SUBOPTIMAL_KHR)) 
 	{
@@ -1844,7 +1848,7 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 		.resolveImageLayout = 0,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.clearValue = {{{0.02, 0, 0.02, 1}}},
+		.clearValue = {{{1, 0, 1, 1}}},
 	};
 	
 	VkRenderingAttachmentInfo depth_attachment = {
@@ -1871,21 +1875,21 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 	
 	vkCmdBeginRenderingKHR(frame->cmd_buffer, &rendering_info);
 	vkCmdBindDescriptorSets(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->pipeline_layout, 0, 1, &frame->scene_set, 0, 0);
-	
-	
+
 	vkCmdSetViewport(frame->cmd_buffer, 0, 1, &r_vulkan_state->viewport);
 	vkCmdSetScissor(frame->cmd_buffer, 0, 1, &r_vulkan_state->scissor);
 	
 	V2S win_size = os_getWindowSize(win);
 	V2F win_size_f = v2f(win_size.x, win_size.y);
-
+ //m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000);
 	//M4F view = m4f_lookAt((V3F){.z = -3}, (V3F){.z = 0}, (V3F){.y = 1});
+	
 	V3F light_color = v3f(1.0f, 1.0f, 1.0f);
 	V3F light_pos = v3f(5.7, 1.3, 1);
-	
+	//
 	R_VULKAN_SceneData scene_data = {
-		.proj = m4f_perspective(degToRad(90), win_size.x * 1.f / win_size.y, 0.01, 1000),
-		.view = view_mat,
+		.proj = proj,
+		.view = view,
 		.screen_size = win_size_f,
 		//.view = view,
 		//.model[0] = m4f_mul(m4f_translate(v3f(-3, 0, 3)), m4f_rotate(v3f(0, 1, 0), counter)),
@@ -1903,121 +1907,102 @@ function void r_vulkan_render(Arena *scratch, OS_Handle win, M4F view_mat, V3F v
 	vmaUnmapMemory(r_vulkan_state->vma, frame->scene_buffer->alloc);
 	
 	// draw rect3 =====================
-	vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc, &mappedData);
-	memcpy(mappedData, rect3_batch->base, rect3_batch->size);
-	vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc);
-	
-	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
-	
-	R_VULKAN_Rect3PushConstants push_constants = 
+	if(rect3_batches)
 	{
-		.scene = frame->scene_buffer->address,
-		.instance = frame->rect3_inst_buffer->address,
-	};
-	
-	// maybe I can have an init function so I can decide allocation
-	// strategy, It feels so weird making everything a ptr.
-	// some stuff like frame data can have
-	// so I am thinking if a handle is to be returned, it is heap
-	// allocated, otherwise it is stack allocated
+		vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->rect3_pipeline);
 
-	vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
-	
-	vkCmdDraw(frame->cmd_buffer, 6, rect3_batch->num, 0, 0);
-	// =================
+		for(R_Batch *rect3_batch = rect3_batches->first; rect3_batch; rect3_batch = rect3_batch->next)
+		{
+			vmaMapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc, &mappedData);
+			memcpy(mappedData, rect3_batch->base, rect3_batch->size);
+			vmaUnmapMemory(r_vulkan_state->vma, frame->rect3_inst_buffer->alloc);
+			
+			R_VULKAN_Rect3PushConstants push_constants = 
+			{
+				.scene = frame->scene_buffer->address,
+				.instance = frame->rect3_inst_buffer->address,
+			};
+			
+			// maybe I can have an init function so I can decide allocation
+			// strategy, It feels so weird making everything a ptr.
+			// some stuff like frame data can have
+			// so I am thinking if a handle is to be returned, it is heap
+			// allocated, otherwise it is stack allocated
+
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_Rect3PushConstants), &push_constants);
+			
+			vkCmdDraw(frame->cmd_buffer, 6, rect3_batch->num, 0, 0);
+		}
+	}
+	// ==========================
 	
 	// draw ui =====================
+	if(ui_batches)
 	{
-		vmaMapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc, &mappedData);
-		memcpy(mappedData, ui_batch->base, ui_batch->size);
-		vmaUnmapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc);
-		
 		vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->ui_pipeline);
-		
-		R_VULKAN_UIPushConstants push_constants = 
+
+		for(R_Batch *ui_batch = ui_batches->first; ui_batch; ui_batch = ui_batch->next)
 		{
-			.scene = frame->scene_buffer->address,
-			.instance = frame->ui_inst_buffer->address,
-		};
-		
-		vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_UIPushConstants), &push_constants);
-		
-		vkCmdDraw(frame->cmd_buffer, 6, ui_batch->num, 0, 0);
+			vmaMapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc, &mappedData);
+			memcpy(mappedData, ui_batch->base, ui_batch->size);
+			vmaUnmapMemory(r_vulkan_state->vma, frame->ui_inst_buffer->alloc);
+				
+			R_VULKAN_UIPushConstants push_constants = 
+			{
+				.scene = frame->scene_buffer->address,
+				.instance = frame->ui_inst_buffer->address,
+			};
+			
+			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_VULKAN_UIPushConstants), &push_constants);
+			
+			vkCmdDraw(frame->cmd_buffer, 6, ui_batch->num, 0, 0);
+		}
 	}
 	// =================
 	
 	// draw meshes =====================
-	
-	// =================
-#if 1
-	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
-	
-	u8 *base = mesh_batch->base;
-
-	for(u32 i = 0; i < mesh_batch->num; i++)
+	if(mesh_batches)
 	{
-		R_BindBuffer *bind_index = base;
-
-		R_VULKAN_Buffer *v_buffer = bind_index->mesh_buffer.u64[0];
-		R_VULKAN_Buffer *i_buffer = bind_index->mesh_buffer.u64[1];
-		
-		vkCmdBindIndexBuffer(frame->cmd_buffer, i_buffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-		
-		base += sizeof(R_BindBuffer);
-
-		for(u32 j = 0; j < bind_index->num_primitives; j++)
+		vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->mesh_pipeline);
+		for(R_Batch *mesh_batch = mesh_batches->first; mesh_batch; mesh_batch = mesh_batch->next)
 		{
-			R_DrawIndexed *draw = base;
-			R_VULKAN_Image *base_tex = draw->base_tex.u64[0];
-			R_VULKAN_Image *normal_tex = draw->normal_tex.u64[0];
-			
-			R_MeshPushConstants push_constants = 
+			u8 *base = mesh_batch->base;
+
+			for(u32 i = 0; i < mesh_batch->num; i++)
 			{
-				.scene_buffer = frame->scene_buffer->address,
-				.model = draw->transform,
-				.v_buffer = v_buffer->address,
-				.base_tex_index = base_tex->index,
-				.normal_tex_index = normal_tex->index,
-				.base_color = draw->color,
-			};
-			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
-			
-			vkCmdDrawIndexed(frame->cmd_buffer, draw->count, 1, draw->start, 0, 0);
-			base += sizeof(R_DrawIndexed);
+				R_BindBuffer *bind_index = base;
+
+				R_VULKAN_Buffer *v_buffer = bind_index->mesh_buffer.u64[0];
+				R_VULKAN_Buffer *i_buffer = bind_index->mesh_buffer.u64[1];
+				
+				vkCmdBindIndexBuffer(frame->cmd_buffer, i_buffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+				
+				base += sizeof(R_BindBuffer);
+
+				for(u32 j = 0; j < bind_index->num_primitives; j++)
+				{
+					R_DrawIndexed *draw = base;
+					R_VULKAN_Image *base_tex = draw->base_tex.u64[0];
+					R_VULKAN_Image *normal_tex = draw->normal_tex.u64[0];
+					
+					R_MeshPushConstants push_constants = 
+					{
+						.scene_buffer = frame->scene_buffer->address,
+						.model = draw->transform,
+						.v_buffer = v_buffer->address,
+						.base_tex_index = base_tex->index,
+						.normal_tex_index = normal_tex->index,
+						.base_color = draw->color,
+					};
+					
+					vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
+					
+					vkCmdDrawIndexed(frame->cmd_buffer, draw->count, 1, draw->start, 0, 0);
+					base += sizeof(R_DrawIndexed);
+				}
+			}
 		}
 	}
-#endif
-
-#if 0
-	
-	vkCmdBindPipeline(frame->cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r_vulkan_state->light_pipeline);
-	
-	for(u32 i = 0; i < r_vulkan_state->cubes[0].num_meshes; i++)
-	{
-		R_Mesh *mesh = r_vulkan_state->cubes[0].meshes + i;
-		vkCmdBindIndexBuffer(frame->cmd_buffer, mesh->i_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-		
-		for(u32 j = 0; j < mesh->num_primitives; j++)
-		{
-			R_Primitive *prim = mesh->primitives + j;
-			R_MeshPushConstants push_constants = 
-			{
-				.scene_buffer = frame->scene_buffer.address,
-				.model = m4f_mul(m4f_translate(light_pos), m4f_scale(v3f(0.2, 0.2, 0.2))),
-				.v_buffer = mesh->v_buffer.address,
-				.base_tex_index = r_vulkan_state->white_texture->index,
-				.normal_tex_index = r_vulkan_state->white_texture->index,
-				.base_color = light_color,
-			};
-			
-			vkCmdPushConstants(frame->cmd_buffer, r_vulkan_state->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(R_MeshPushConstants), &push_constants);
-			
-			vkCmdDrawIndexed(frame->cmd_buffer, prim->count, 1, prim->start, 0, 0);
-		}
-	}
-	
-#endif
 	
 	vkCmdEndRenderingKHR(frame->cmd_buffer);
 	

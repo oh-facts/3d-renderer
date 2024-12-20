@@ -72,16 +72,17 @@
 #include <blake2/blake2b.c>
 
 #include <texture/texture_cache.c>
-#include <winter/camera.c>
+#include <winter/winter_camera.c>
+#include <winter/winter_tilemap.c>
 
 int main(int argc, char *argv[])
 {
 	os_init();
-	
+	r_init();
 	tex_init();
 	
 	Arena *perm = arenaAllocSized(MB(32), GB(1));
-	OS_Handle win = os_openWindow("Ladybird", 50, 50, 960, 540);
+	OS_Handle win = os_openWindow("winter steam game", 50, 50, 960, 540);
 	
 	typedef enum Art Art;
 	enum Art
@@ -145,50 +146,41 @@ int main(int argc, char *argv[])
 	
 	b32 run = 1;
 	
- Camera camera = {
-		.pos.x = 7.17,
-		.pos.y = 0.66,
-		.pos.z = -0.21,
-		.yaw = 180,
-		.pitch = 0,
-		.speed = 5
+ WIN_Camera camera = {
+		.pos.x = 0,
+		.pos.y = 0,
+		.speed = 500,
+		.zoom = 600,
+		.aspect = 960.f / 540,
 	};
 
 	for(;run;)
- {
+	{
 		f64 time_since_last = time_elapsed;
 		ArenaTemp temp = arenaTempBegin(frame);
 		
-		OS_EventList list = os_pollEvents(temp.arena);
-  cam_update(&camera, &list, delta);
-
-		R_Batch mesh_batch = {0};
-		R_Batch rect3_batch = {0};
-		R_Batch rect2_batch = {0};
-		rect2_batch.cap = MB(1);
-		rect2_batch.base = pushArray(temp.arena, u8, rect2_batch.cap);
+		V2S size = os_getWindowSize(win);
+		camera.aspect = size.x / (size.y * 1.f);
 		
+		OS_EventList list = os_pollEvents(temp.arena);
+		
+
+		R_BatchList ui_batches = {0};
+
 		static f32 counter = 0;
 		counter += delta;
 
-		TEX_Scope *scope = tex_scopeOpen();
-		{
-			R_Handle handle = tex_handleFromHash(scope, hashes[0]);
-			R_VULKAN_Image *image = handle.u64[0];
-			
-			R_Rect2 *test_ui = r_pushRect2(&rect2_batch, rectF32(0, 0, 128, 128), v4f(1, 1, 1, 1));
-			test_ui->border_color = v4f(1, 0, 0, 1);
-			test_ui->radius = 4;
-			test_ui->border_thickness = 4;
-			test_ui->tex_id = image->index;
-		}
-		tex_scopeClose(scope);
+		win_cam_update(&camera, &list, delta);
+		M4F proj = win_cam_getProj(&camera);
+		M4F view = win_cam_getView(&camera);
+
+		r_begin(frame);
+			render_tilemap(&ui_batches, camera.pos);
+		r_end();
 
 		r_vulkan_beginRendering();
-
-  M4F view = cam_getView(&camera);
-  
-		r_vulkan_render(temp.arena, win, view, camera.pos, &rect3_batch, &rect2_batch, &mesh_batch);
+		
+		r_vulkan_render(temp.arena, win, &ui_batches, 0, 0, proj, view, v3f(0, 0, 0));
 		r_vulkan_endRendering(win);
 		
 		//os_eventListPrint(&list);

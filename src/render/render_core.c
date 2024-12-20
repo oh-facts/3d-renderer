@@ -82,12 +82,76 @@ struct R_Batch
 	u32 num;
 	u32 size;
 	u32 cap;
+	R_Batch *next;
 };
 
-function R_Rect2 *r_pushRect2(R_Batch *batch, RectF32 dst, V4F color)
+typedef struct R_BatchList R_BatchList;
+struct R_BatchList
 {
-	Assert(batch->base + batch->cap > batch->size + sizeof(R_Rect2));
-	
+	R_Batch *first;
+	R_Batch *last;
+	u32 count;
+};
+
+typedef struct R_State R_State;
+struct R_State
+{
+	Arena *arena;
+	Arena *frame;
+};
+
+global R_State *r_state;
+
+function void r_init()
+{
+	Arena *arena = arenaAlloc();
+	r_state = pushArray(arena, R_State, 1);
+	r_state->arena = arena;
+}
+
+function void r_begin(Arena *arena)
+{
+	r_state->frame = arena;
+}
+
+function void r_end()
+{
+	r_state->frame = 0;
+}
+
+function R_Batch *r_pushBatch(R_BatchList *list, u32 cap)
+{
+	R_Batch *out = pushArray(r_state->frame, R_Batch, 1);
+	*out = (R_Batch){0};
+		
+	if(!list->first)
+	{
+		list->first = list->last = out;
+	}
+	else
+	{
+		list->last->next = out;
+		list->last = out;		
+	}
+
+	out->cap = cap;
+ out->base = pushArray(r_state->frame, u8, cap);
+
+	list->count+=1;
+
+	return out;
+}
+
+function R_Rect2 *r_pushRect2(R_BatchList *list, RectF32 dst, V4F color)
+{	
+	R_Batch *batch = list->last;
+
+	if(!batch || (batch->base + batch->cap < batch->size + sizeof(R_Rect2)))
+	{
+		batch = r_pushBatch(list, 1024);
+		// set state params
+	}
+
 	R_Rect2 *out = batch->base + batch->size;
 	out->dst = dst;
 	out->src = rectF32(0, 0, 1, 1);
@@ -99,7 +163,7 @@ function R_Rect2 *r_pushRect2(R_Batch *batch, RectF32 dst, V4F color)
 	
 	// NOTE(mizu): figure out why there is a 1px ghost outline even when thickness is 0
 	out->border_color = color;
-	out->radius = 0;
+	out->radius = 0; 
 	out->border_thickness = 0;
 	
 	batch->num+=1;
@@ -108,14 +172,16 @@ function R_Rect2 *r_pushRect2(R_Batch *batch, RectF32 dst, V4F color)
 	return out;
 }
 
-function void r_pushText(R_Batch *batch, Str8 text, V2F pos, V4F color, f32 scale)
+function R_Rect3 *r_pushRect3(R_BatchList *list, M4F model, u32 tex_id)
 {
-	//RectF32 ex = rectFromString(text, scale);
-}
+	R_Batch *batch = list->last;
 
-function R_Rect3 *r_pushRect3(R_Batch *batch, M4F model, u32 tex_id)
-{
-	Assert(batch->base + batch->cap > batch->size + sizeof(R_Rect3));
+	if(!batch || (batch->base + batch->cap < batch->size + sizeof(R_Rect3)))
+	{
+		batch = r_pushBatch(list, 1024);
+		// set state params
+	}
+
 	R_Rect3 *out = batch->base + batch->size;
 	out->model = model;
 	out->tex_id = tex_id;

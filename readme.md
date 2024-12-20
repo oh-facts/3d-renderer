@@ -87,9 +87,6 @@ call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliar
 
 This should do it. You need the x64 developer tools terminal. Powershell won't work unless you've set it up / know what you're doing.
 
-### Contributions
-Open Issue. Discuss Issue. Open PR.
-
 ### Project Structure
 
 All source code is inside `src/`
